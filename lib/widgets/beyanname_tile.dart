@@ -1,3 +1,4 @@
+import 'package:agys_depo_yonetim/pages/qr_kod.dart' show ScannerPage;
 import 'package:flutter/material.dart';
 import '../models/beyanname_item.dart';
 import '../models/saha_detay.dart';
@@ -11,11 +12,7 @@ class BeyannameTile extends StatefulWidget {
   final BeyannameItem item;
   final VoidCallback onEdited;
 
-  const BeyannameTile({
-    super.key,
-    required this.item,
-    required this.onEdited,
-  });
+  const BeyannameTile({super.key, required this.item, required this.onEdited});
 
   @override
   State<BeyannameTile> createState() => _BeyannameTileState();
@@ -43,8 +40,13 @@ class _BeyannameTileState extends State<BeyannameTile> {
           children: [
             Icon(Icons.check_circle, color: Colors.green, size: 20),
             const SizedBox(width: 4),
-            Text('Uygun',
-                style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600)),
+            Text(
+              'Uygun',
+              style: TextStyle(
+                color: Colors.green,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         );
       case Durum.eksik:
@@ -53,8 +55,13 @@ class _BeyannameTileState extends State<BeyannameTile> {
           children: [
             Icon(Icons.remove_circle, color: Colors.amber, size: 20),
             const SizedBox(width: 4),
-            Text('Eksik ($fark)',
-                style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w600)),
+            Text(
+              'Eksik ($fark)',
+              style: TextStyle(
+                color: Colors.amber,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         );
       case Durum.fazla:
@@ -63,8 +70,10 @@ class _BeyannameTileState extends State<BeyannameTile> {
           children: [
             Icon(Icons.add_circle, color: Colors.red, size: 20),
             const SizedBox(width: 4),
-            Text('Fazla (+$fark)',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+            Text(
+              'Fazla (+$fark)',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+            ),
           ],
         );
     }
@@ -85,10 +94,13 @@ class _BeyannameTileState extends State<BeyannameTile> {
           ListTile(
             onTap: () => setState(() => _expanded = !_expanded),
             leading: Dot(color: color),
-            title: Text(kayit.beyannameNo,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+            title: Text(
+              kayit.beyannameNo,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
             subtitle: Text(
-                'Kayıt: ${kayit.adet} adet / ${kayit.kg.toStringAsFixed(1)} kg   •   Saha: ${saha.adet} adet'),
+              'Kayıt: ${kayit.adet} adet / ${kayit.kg.toStringAsFixed(1)} kg   •   Saha: ${saha.adet} adet',
+            ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -132,7 +144,8 @@ class _BeyannameTileState extends State<BeyannameTile> {
       isScrollControlled: true,
       showDragHandle: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
       builder: (context) {
         return Padding(
           padding: EdgeInsets.only(
@@ -144,7 +157,7 @@ class _BeyannameTileState extends State<BeyannameTile> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SheetHeader(
+              SheetHeader(
                 title: 'Kayıt Detayları',
                 subtitle: 'Sistem kayıtları (teorik stok)',
                 icon: Icons.inventory_2_outlined,
@@ -154,8 +167,9 @@ class _BeyannameTileState extends State<BeyannameTile> {
               ReadonlyRow(label: 'Ürün Kodu', value: k.urunKodu),
               ReadonlyRow(label: 'Lokasyon', value: k.lokasyon),
               ReadonlyRow(
-                  label: 'Tarih',
-                  value: '${k.tarih.day}.${k.tarih.month}.${k.tarih.year}'),
+                label: 'Tarih',
+                value: '${k.tarih.day}.${k.tarih.month}.${k.tarih.year}',
+              ),
               ReadonlyRow(label: 'Batch', value: k.batch),
               ReadonlyRow(label: 'Adet', value: '${k.adet}'),
               ReadonlyRow(label: 'KG', value: k.kg.toStringAsFixed(1)),
@@ -198,7 +212,8 @@ class _BeyannameTileState extends State<BeyannameTile> {
       isScrollControlled: true,
       showDragHandle: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
       builder: (context) {
         return Padding(
           padding: EdgeInsets.only(
@@ -210,10 +225,23 @@ class _BeyannameTileState extends State<BeyannameTile> {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                const SheetHeader(
+                SheetHeader(
                   title: 'Saha Detayları',
                   subtitle: 'Sahadan girilecek alanlar',
                   icon: Icons.edit_note,
+                  trailing: IconButton(
+                    icon: const Icon(Icons.qr_code_scanner),
+                    onPressed: () async {
+                      final result = await Navigator.of(context).push<String>(
+                        MaterialPageRoute(builder: (_) => const ScannerPage()),
+                      );
+                      if (result != null && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Bulunan kod: $result')),
+                        );
+                      }
+                    },
+                  ),
                 ),
                 const SizedBox(height: 16),
 
@@ -260,7 +288,10 @@ class _BeyannameTileState extends State<BeyannameTile> {
                           'Sayılan Adet',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            color:
+                                Theme.of(
+                                  context,
+                                ).colorScheme.onPrimaryContainer,
                           ),
                         ),
                         Text(
@@ -268,7 +299,10 @@ class _BeyannameTileState extends State<BeyannameTile> {
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            color:
+                                Theme.of(
+                                  context,
+                                ).colorScheme.onPrimaryContainer,
                           ),
                         ),
                       ],
@@ -293,7 +327,9 @@ class _BeyannameTileState extends State<BeyannameTile> {
                               adet: int.tryParse(adetCtrl.text) ?? s.adet,
                               taban: tabanCtrl.text,
                               ustSira: ustSiraCtrl.text,
-                              plusMinus: int.tryParse(plusMinusCtrl.text) ?? s.plusMinus,
+                              plusMinus:
+                                  int.tryParse(plusMinusCtrl.text) ??
+                                  s.plusMinus,
                               hesap: '',
                             );
                           });

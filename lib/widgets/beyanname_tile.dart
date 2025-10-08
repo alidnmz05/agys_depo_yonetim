@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:agys_depo_yonetim/pages/qr_kod.dart' show ScannerPage;
+import 'package:agys_depo_yonetim/services/settings_controller.dart';
 import 'package:flutter/material.dart';
 import '../models/beyanname_item.dart';
 import '../models/saha_detay.dart';
@@ -21,6 +22,34 @@ class BeyannameTile extends StatefulWidget {
 }
 
 class _BeyannameTileState extends State<BeyannameTile> {
+  String? _depoKonumu;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _depoKonumu = _readInitialLocation(widget.item);
+  }
+
+  String? _readInitialLocation(dynamic it) {
+    try {
+      final kd = it.kayitDetay;
+      final sd = it.saha;
+      final candidates = <dynamic>[
+        sd?.depoKonumu,
+        kd?.depoKonumu,
+        kd?.lokasyon,
+        kd?.location,
+        kd?.depoYeri,
+        (kd?.raf != null && kd?.goz != null) ? '${kd.raf}/${kd.goz}' : null,
+      ];
+      for (final v in candidates) {
+        if (v is String && v.trim().isNotEmpty) return v;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   bool _expanded = false;
 
   Color _statusColor(Durum d) {
@@ -141,6 +170,7 @@ class _BeyannameTileState extends State<BeyannameTile> {
 
   void _showKayitDetay(BuildContext context) {
     final k = widget.item.kayit;
+    final loc = _depoKonumu ?? _readInitialLocation(widget.item);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -168,6 +198,14 @@ class _BeyannameTileState extends State<BeyannameTile> {
               ReadonlyRow(label: 'Beyanname No', value: k.beyannameNo),
               ReadonlyRow(label: 'Ürün Kodu', value: k.urunKodu),
               ReadonlyRow(label: 'Lokasyon', value: k.lokasyon),
+
+              if (SettingsController.instance.showLocation) ...[
+                const SizedBox(height: 8),
+                ReadonlyRow(
+                  label: 'Depodaki yeri',
+                  value: (loc != null && loc.trim().isNotEmpty) ? loc : '-',
+                ),
+              ],
               ReadonlyRow(
                 label: 'Tarih',
                 value: '${k.tarih.day}.${k.tarih.month}.${k.tarih.year}',
@@ -193,6 +231,7 @@ class _BeyannameTileState extends State<BeyannameTile> {
     final tabanCtrl = TextEditingController(text: s.taban);
     final ustSiraCtrl = TextEditingController(text: s.ustSira);
     final plusMinusCtrl = TextEditingController(text: s.plusMinus.toString());
+    final konumCtrl = TextEditingController(text: _depoKonumu ?? '');
 
     // Adet hesaplama fonksiyonu
     void hesaplaAdet() {
@@ -299,7 +338,12 @@ class _BeyannameTileState extends State<BeyannameTile> {
                 EditRow(label: 'Sıra', controller: siraCtrl),
                 EditRow(label: 'Etiket', controller: etiketCtrl),
                 EditRow(label: 'Batch', controller: batchCtrl),
-
+                if (SettingsController.instance.showLocation) ...[
+                  const SizedBox(height: 8),
+                  // Projendeki editlenebilir satır widget'ını kullan:
+                  EditRow(label: 'Depodaki yeri', controller: konumCtrl),
+                  const Divider(height: 24),
+                ],
                 const Divider(height: 24),
 
                 // Hesaplama alanları - kompakt
@@ -367,8 +411,19 @@ class _BeyannameTileState extends State<BeyannameTile> {
                     Expanded(
                       child: FilledButton(
                         onPressed: () {
+                          // 1) Konumu state'e yaz (Kayıt Detay bu state'ten okuyacak)
+                          final vKonum = konumCtrl.text.trim();
+                          setState(() {
+                            _depoKonumu = vKonum.isEmpty ? null : vKonum;
+                          });
+
+                          // 2) Mevcut saha kopyalama akışın (HİÇ DEĞİŞTİRMEDİM)
                           Navigator.pop(context);
                           setState(() {
+                            final s =
+                                widget
+                                    .item
+                                    .saha; // s'yi yukarıda zaten alıyorsan bunu kaldırabilirsin
                             widget.item.saha = s.copyWith(
                               bolge: bolgeCtrl.text,
                               sira: siraCtrl.text,
@@ -381,10 +436,13 @@ class _BeyannameTileState extends State<BeyannameTile> {
                                   int.tryParse(plusMinusCtrl.text) ??
                                   s.plusMinus,
                               hesap: '',
+                              // ⬇️ Modelinde bu alan VARSA yorumdan çıkar:
+                              // depoKonumu: _depoKonumu,
                             );
                           });
                           onEdited();
                         },
+
                         child: const Text('Kaydet'),
                       ),
                     ),

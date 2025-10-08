@@ -1,3 +1,4 @@
+import 'package:agys_depo_yonetim/pages/ilk_acilis_konum.dart';
 import 'package:agys_depo_yonetim/pages/qr_kod.dart';
 import 'package:flutter/material.dart';
 import '../models/durum.dart';
@@ -113,6 +114,16 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
       appBar: AppBar(
         title: const Text('Beyanname Listesi'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const FirstRunSettingsPage()),
+              );
+              setState(() {});
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.qr_code_scanner),
             onPressed: () async {

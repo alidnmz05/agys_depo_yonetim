@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:agys_depo_yonetim/pages/qr_kod.dart' show ScannerPage;
 import 'package:flutter/material.dart';
 import '../models/beyanname_item.dart';
@@ -202,6 +204,48 @@ class _BeyannameTileState extends State<BeyannameTile> {
       adetCtrl.text = hesaplananAdet.toString();
     }
 
+    // QR string -> kontrolleri doldur
+    void applyQrToForm(String raw) {
+      // 1) Önce JSON dene
+      Map<String, String> kv = {};
+      try {
+        final m = json.decode(raw) as Map<String, dynamic>;
+        m.forEach((k, v) => kv[k] = v?.toString() ?? '');
+      } catch (_) {
+        // 2) "key=value;key2=value2" gibi metin
+        for (final part in raw.split(RegExp(r'[;,\n,]'))) {
+          final i = part.indexOf('=');
+          if (i > 0) {
+            kv[part.substring(0, i).trim()] = part.substring(i + 1).trim();
+          }
+        }
+      }
+
+      // Kısa yardımcı
+      void setIf(List<String> keys, TextEditingController c) {
+        for (final k in keys) {
+          final v = kv[k];
+          if (v != null && v.isNotEmpty) {
+            c.text = v;
+            break;
+          }
+        }
+      }
+
+      // Alan eşlemeleri (JSON ya da metin hangi anahtar gelirse)
+      setIf(['region', 'bolge'], bolgeCtrl);
+      setIf(['row', 'sira'], siraCtrl);
+      setIf(['label', 'etiket'], etiketCtrl);
+      setIf(['batch'], batchCtrl);
+      setIf(['base', 'taban'], tabanCtrl);
+      setIf(['topRow', 'ustSira', 'ust_sira'], ustSiraCtrl);
+      setIf(['plusMinus', '+/-', 'plus_minus'], plusMinusCtrl);
+      setIf(['counted', 'adet'], adetCtrl);
+
+      // Taban/Üst Sıra/+/- geldiyse adeti yeniden hesapla
+      hesaplaAdet();
+    }
+
     // Her alan değiştiğinde adeti yeniden hesapla
     tabanCtrl.addListener(hesaplaAdet);
     ustSiraCtrl.addListener(hesaplaAdet);
@@ -235,11 +279,17 @@ class _BeyannameTileState extends State<BeyannameTile> {
                       final result = await Navigator.of(context).push<String>(
                         MaterialPageRoute(builder: (_) => const ScannerPage()),
                       );
-                      if (result != null && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Bulunan kod: $result')),
-                        );
+                      if (!context.mounted ||
+                          result == null ||
+                          result.isEmpty) {
+                        return;
                       }
+                      applyQrToForm(result); // <-- QR’ı forma yaz
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('QR verileri forma uygulandı'),
+                        ),
+                      );
                     },
                   ),
                 ),

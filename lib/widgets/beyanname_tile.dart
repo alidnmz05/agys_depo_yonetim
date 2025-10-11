@@ -150,14 +150,14 @@ class _BeyannameTileState extends State<BeyannameTile> {
                   Expanded(
                     child: FilledButton.tonal(
                       onPressed: () => _showKayitDetay(context),
-                      child: const Text('Kayıt Detayları'),
+                      child: const Text('Kayıtlı Stok'),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: FilledButton(
                       onPressed: () => _showSahaDetay(context, widget.onEdited),
-                      child: const Text('Saha Detayları'),
+                      child: const Text('Fiili Stok'),
                     ),
                   ),
                 ],

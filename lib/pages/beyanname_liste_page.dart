@@ -49,11 +49,10 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
     } catch (e) {
       _error = e.toString();
     } finally {
-      if (mounted) {
+      if (mounted)
         setState(() {
           _loading = false;
         });
-      }
     }
   }
 
@@ -76,6 +75,13 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
     }
 
     setState(() => _visible = res);
+  }
+
+  void applyQrToForm(String s) {
+    setState(() {
+      _q.text = s;
+    });
+    _apply();
   }
 
   Durum _statusOf(GirisKalanBilgiDto d) {
@@ -124,12 +130,13 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
               final result = await Navigator.of(context).push<String>(
                 MaterialPageRoute(builder: (_) => const ScannerPage()),
               );
-              if (result != null && context.mounted) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text('Bulunan kod: $result')));
-              }
+              if (!mounted || result == null || result.isEmpty) return;
+              applyQrToForm(result);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('QR verileri forma uygulandı')),
+              );
             },
+            tooltip: 'QR Tara',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -249,65 +256,58 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
       padding: const EdgeInsets.all(12),
       itemCount: _visible.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (_, i) => _tile(_visible[i]),
+      itemBuilder: (_, i) => _tile(i, _visible[i]),
     );
   }
 
-  Widget _tile(GirisKalanBilgiDto d) {
+  Widget _tile(int i, GirisKalanBilgiDto d) {
     final s = _statusOf(d);
     final title = d.beyannameNo ?? '-';
-    final dt = d.beyannameTarihi;
+    final t = d.beyannameTarihi;
     final dateStr =
-        dt == null
+        t == null
             ? ''
-            : '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}';
-
-    final kayitAdet =
-        d.kalanKap != null &&
-                d.girenToplamBrutKg != null &&
-                d.cikanToplamBrutKg != null
-            ? null // adet bilgisi yoksa boş bırak
-            : null;
+            : '${t.day.toString().padLeft(2, '0')}.${t.month.toString().padLeft(2, '0')}.${t.year}';
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-        child: Column(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: PageStorageKey('bx_$i'),
+          maintainState: true,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: _statusColor(s),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              if (dateStr.isNotEmpty)
+                Text(dateStr, style: const TextStyle(color: Colors.black54)),
+              const SizedBox(width: 8),
+              _statusBadge(s),
+            ],
+          ),
           children: [
-            // Üst satır
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: _statusColor(s),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                if (dateStr.isNotEmpty)
-                  Text(dateStr, style: const TextStyle(color: Colors.black54)),
-                const SizedBox(width: 8),
-                _statusBadge(s),
-                const SizedBox(width: 4),
-                const Icon(Icons.expand_more, color: Colors.black54),
-              ],
-            ),
             const SizedBox(height: 6),
-            // Özet
+            // Özet satırı
             Row(
               children: [
                 const SizedBox(width: 24),
@@ -322,31 +322,51 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            // Butonlar
-            Row(
-              children: [
-                Expanded(
-                  child: _pillButton(
-                    label: 'Kayıt Detayları',
-                    selected: true,
-                    onTap: () {
-                      // TODO: kayıt detay route
-                    },
+            const SizedBox(height: 12),
+            // Kayıt Detayları
+            _detailsSection(
+              title: 'Kayıt Detayları',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _kv('Beyanname No', d.beyannameNo),
+                  _kv('Özet Beyan No', d.ozetBeyanNo),
+                  _kv('Alıcı Firma', d.aliciFirma),
+                  _kv('Eşya Tanımı', d.esyaTanimi),
+                  _kv(
+                    'Giren Brüt',
+                    d.girenToplamBrutKg == null
+                        ? null
+                        : '${_fmtKg.format(d.girenToplamBrutKg)} kg',
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _pillButton(
-                    label: 'Saha Detayları',
-                    selected: false,
-                    onTap: () {
-                      // TODO: saha detay route
-                    },
+                  _kv(
+                    'Çıkan Brüt',
+                    d.cikanToplamBrutKg == null
+                        ? null
+                        : '${_fmtKg.format(d.cikanToplamBrutKg)} kg',
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+            const SizedBox(height: 8),
+            // Saha Detayları
+            _detailsSection(
+              title: 'Saha Detayları',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _kv('Kalan Kap', d.kalanKap?.toString()),
+                  _kv(
+                    'Kalan Brüt',
+                    d.kalanBrutKg == null
+                        ? null
+                        : '${_fmtKg.format(d.kalanBrutKg)} kg',
+                  ),
+                  // Raf/Göz alanları geldiğinde buraya ekleyin
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
           ],
         ),
       ),
@@ -383,28 +403,36 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
     );
   }
 
-  Widget _pillButton({
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        height: 42,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE8F0FE) : const Color(0xFF2F80ED),
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? const Color(0xFF2F80ED) : Colors.white,
-            fontWeight: FontWeight.w600,
+  Widget _detailsSection({required String title, required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FC),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _kv(String k, String? v) {
+    if (v == null || v.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(k, style: const TextStyle(color: Colors.black54)),
           ),
-        ),
+          Expanded(child: Text(v)),
+        ],
       ),
     );
   }
@@ -424,7 +452,7 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
   String _fmtKayitKg(GirisKalanBilgiDto d) {
     final kgIn = d.girenToplamBrutKg;
     final kgOut = d.cikanToplamBrutKg;
-    final kg = (kgIn != null && kgOut != null) ? (kgIn) : (kgIn ?? kgOut ?? 0);
+    final kg = (kgIn != null && kgOut != null) ? kgIn : (kgIn ?? kgOut ?? 0);
     return '${_fmtKg.format(kg)} kg';
   }
 

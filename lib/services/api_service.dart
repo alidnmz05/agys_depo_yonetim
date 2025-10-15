@@ -164,10 +164,12 @@ class ApiService {
 
   static String? _msg(dynamic data) {
     try {
-      if (data is Map && data['Message'] is String)
+      if (data is Map && data['Message'] is String) {
         return data['Message'] as String;
-      if (data is Map && data['error'] is String)
+      }
+      if (data is Map && data['error'] is String) {
         return data['error'] as String;
+      }
       return null;
     } catch (_) {
       return null;

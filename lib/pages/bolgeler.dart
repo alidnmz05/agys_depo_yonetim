@@ -22,6 +22,10 @@ class _BolgePageState extends State<BolgePage> {
   String? _err;
   List<Bolge> _path = [];
 
+  // Çoklu seçim durumu
+  bool _selectMode = false;
+  final Set<int> _selected = {};
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +43,8 @@ class _BolgePageState extends State<BolgePage> {
     setState(() {
       _loading = true;
       _err = null;
+      _selected.clear();
+      _selectMode = false;
     });
     try {
       await sc.init();
@@ -78,6 +84,10 @@ class _BolgePageState extends State<BolgePage> {
   }
 
   Future<void> _open(Bolge b) async {
+    if (_selectMode) {
+      _toggleSelected(b.id);
+      return;
+    }
     _currentParentId = b.id;
     await _load();
   }
@@ -129,7 +139,7 @@ class _BolgePageState extends State<BolgePage> {
       builder:
           (_) => AlertDialog(
             title: const Text('Sil'),
-            content: Text('"${b.ad}" silinsin mi?'),
+            content: Text('\"${b.ad}\" silinsin mi?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
@@ -145,6 +155,68 @@ class _BolgePageState extends State<BolgePage> {
     if (ok != true) return;
     await api.deleteNode(id: b.id);
     await _load();
+  }
+
+  Future<void> _deleteSelected() async {
+    if (_selected.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: Text('Seçili ${_selected.length} öğe silinsin mi?'),
+            content: const Text('Bu işlem geri alınamaz.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Vazgeç'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Sil'),
+              ),
+            ],
+          ),
+    );
+    if (ok != true) return;
+    for (final id in _selected.toList()) {
+      await api.deleteNode(id: id);
+    }
+    await _load();
+  }
+
+  void _toggleSelected(int id) {
+    setState(() {
+      if (_selected.contains(id)) {
+        _selected.remove(id);
+      } else {
+        _selected.add(id);
+      }
+      if (_selected.isEmpty) _selectMode = false;
+    });
+  }
+
+  void _enterSelectMode(Bolge b) {
+    setState(() {
+      _selectMode = true;
+      _selected.clear();
+      _selected.add(b.id);
+    });
+  }
+
+  void _selectAll() {
+    setState(() {
+      _selectMode = true;
+      _selected
+        ..clear()
+        ..addAll(_filtered.map((e) => e.id));
+    });
+  }
+
+  void _cancelSelect() {
+    setState(() {
+      _selectMode = false;
+      _selected.clear();
+    });
   }
 
   Future<String?> _promptText({
@@ -181,14 +253,38 @@ class _BolgePageState extends State<BolgePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bölge Yönetimi'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _createNode(parentId: _currentParentId),
-          ),
-        ],
+        title:
+            _selectMode
+                ? Text('${_selected.length} seçildi')
+                : const Text('Bölge Yönetimi'),
+        leading:
+            _selectMode
+                ? IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: _cancelSelect,
+                )
+                : null,
+        actions:
+            _selectMode
+                ? [
+                  IconButton(
+                    icon: const Icon(Icons.select_all),
+                    tooltip: 'Tümünü seç',
+                    onPressed: _selectAll,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    tooltip: 'Seçilileri sil',
+                    onPressed: _deleteSelected,
+                  ),
+                ]
+                : [
+                  IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () => _createNode(parentId: _currentParentId),
+                  ),
+                ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
@@ -227,50 +323,66 @@ class _BolgePageState extends State<BolgePage> {
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (_, i) {
               final b = _filtered[i];
+              final selected = _selected.contains(b.id);
               return ListTile(
+                onTap: () => _open(b),
+                onLongPress: () => _enterSelectMode(b),
+                leading:
+                    _selectMode
+                        ? Checkbox(
+                          value: selected,
+                          onChanged: (_) => _toggleSelected(b.id),
+                        )
+                        : null,
                 title: Text(b.ad),
                 subtitle: b.kod == null ? null : Text(b.kod!),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (b.childCount > 0)
-                      Text(
-                        '${b.childCount}',
-                        style: const TextStyle(color: Colors.black54),
-                      ),
-                    IconButton(
-                      icon: const Icon(Icons.drive_file_move),
-                      onPressed: () => _open(b),
-                    ),
-                    PopupMenuButton<String>(
-                      onSelected: (v) {
-                        switch (v) {
-                          case 'add':
-                            _createNode(parentId: b.id);
-                            break;
-                          case 'rename':
-                            _rename(b);
-                            break;
-                          case 'delete':
-                            _delete(b);
-                            break;
-                        }
-                      },
-                      itemBuilder:
-                          (_) => const [
-                            PopupMenuItem(
-                              value: 'add',
-                              child: Text('Alt Bölge Ekle'),
+                trailing:
+                    _selectMode
+                        ? null
+                        : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (b.childCount > 0)
+                              Text(
+                                '${b.childCount}',
+                                style: const TextStyle(color: Colors.black54),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.drive_file_move),
+                              onPressed: () => _open(b),
                             ),
-                            PopupMenuItem(
-                              value: 'rename',
-                              child: Text('Yeniden Adlandır'),
+                            PopupMenuButton<String>(
+                              onSelected: (v) {
+                                switch (v) {
+                                  case 'add':
+                                    _createNode(parentId: b.id);
+                                    break;
+                                  case 'rename':
+                                    _rename(b);
+                                    break;
+                                  case 'delete':
+                                    _delete(b);
+                                    break;
+                                }
+                              },
+                              itemBuilder:
+                                  (_) => const [
+                                    PopupMenuItem(
+                                      value: 'add',
+                                      child: Text('Alt Bölge Ekle'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'rename',
+                                      child: Text('Yeniden Adlandır'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text('Sil'),
+                                    ),
+                                  ],
                             ),
-                            PopupMenuItem(value: 'delete', child: Text('Sil')),
                           ],
-                    ),
-                  ],
-                ),
+                        ),
               );
             },
           ),

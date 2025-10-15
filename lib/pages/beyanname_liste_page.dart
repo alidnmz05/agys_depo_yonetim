@@ -14,6 +14,94 @@ class BeyannameListePage extends StatefulWidget {
 }
 
 class _BeyannameListePageState extends State<BeyannameListePage> {
+  void _showKayitDetay(GirisKalanBilgiDto d) {
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        String _fmtDate(DateTime? t) {
+          if (t == null) return '';
+          return '${t.day.toString().padLeft(2, '0')}.${t.month.toString().padLeft(2, '0')}.${t.year}';
+        }
+
+        Widget row(String k, String? v) {
+          if (v == null || v.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 160,
+                  child: Text(k, style: const TextStyle(color: Colors.black54)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(v)),
+              ],
+            ),
+          );
+        }
+
+        String? fmtKg(num? v) => v == null ? null : '${_fmtKg.format(v)} kg';
+
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.95,
+          builder: (_, controller) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: ListView(
+                controller: controller,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Kayıt Detayları',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+
+                  row('Alıcı Firma', d.aliciFirma),
+                  row('Beyanname No', d.beyannameNo),
+                  row('Beyanname Tarihi', _fmtDate(d.beyannameTarihi)),
+                  row(
+                    'Giren Kap',
+                    d.girenToplamBrutKg == null ? null : null,
+                  ), // kap alanı yoksa boş bırak
+                  row(
+                    'Çıkan Kap',
+                    d.cikanToplamBrutKg == null ? null : null,
+                  ), // kap alanı yoksa boş bırak
+                  row('Kalan Kap', d.kalanKap?.toString()),
+                  row('Eşya Tanımı', d.esyaTanimi),
+                  row('Çıkan Toplam Brüt Kg', fmtKg(d.cikanToplamBrutKg)),
+                  row('Giren Toplam Brüt Kg', fmtKg(d.girenToplamBrutKg)),
+                  row('Kalan Brüt Kg', fmtKg(d.kalanBrutKg)),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   final _api = ApiService();
   final _q = TextEditingController();
   final _fmtKg = NumberFormat('#,##0.##', 'tr_TR');
@@ -308,65 +396,30 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
           children: [
             const SizedBox(height: 6),
             // Özet satırı
+            const SizedBox(height: 12),
             Row(
               children: [
-                const SizedBox(width: 24),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _bullet('Kayıt: ${_fmtKayitKg(d)}'),
-                      _bullet('Saha: ${_fmtSahaAdet(d)}'),
-                    ],
+                  child: _pillButton(
+                    label: 'Kayıt Detayları',
+                    selected: true,
+                    onTap: () => _showKayitDetay(_visible[i]),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _pillButton(
+                    label: 'Saha Detayları',
+                    selected: false,
+                    onTap: () {
+                      // TODO: saha bottom sheet burada açılacak
+                    },
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            // Kayıt Detayları
-            _detailsSection(
-              title: 'Kayıt Detayları',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _kv('Beyanname No', d.beyannameNo),
-                  _kv('Özet Beyan No', d.ozetBeyanNo),
-                  _kv('Alıcı Firma', d.aliciFirma),
-                  _kv('Eşya Tanımı', d.esyaTanimi),
-                  _kv(
-                    'Giren Brüt',
-                    d.girenToplamBrutKg == null
-                        ? null
-                        : '${_fmtKg.format(d.girenToplamBrutKg)} kg',
-                  ),
-                  _kv(
-                    'Çıkan Brüt',
-                    d.cikanToplamBrutKg == null
-                        ? null
-                        : '${_fmtKg.format(d.cikanToplamBrutKg)} kg',
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Saha Detayları
-            _detailsSection(
-              title: 'Saha Detayları',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _kv('Kalan Kap', d.kalanKap?.toString()),
-                  _kv(
-                    'Kalan Brüt',
-                    d.kalanBrutKg == null
-                        ? null
-                        : '${_fmtKg.format(d.kalanBrutKg)} kg',
-                  ),
-                  // Raf/Göz alanları geldiğinde buraya ekleyin
-                ],
-              ),
-            ),
             const SizedBox(height: 4),
+            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -459,5 +512,31 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
   String _fmtSahaAdet(GirisKalanBilgiDto d) {
     final adet = d.kalanKap; // eldeki en yakın alan
     return adet == null ? '-' : '$adet adet';
+  }
+
+  Widget _pillButton({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFE8F0FE) : const Color(0xFF2F80ED),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? const Color(0xFF2F80ED) : Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
   }
 }

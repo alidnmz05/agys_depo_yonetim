@@ -61,10 +61,7 @@ class _ScannerPageState extends State<ScannerPage> {
       body: Stack(
         children: [
           // Kamera + tarama
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-          ),
+          MobileScanner(controller: _controller, onDetect: _onDetect),
           // Vizör
           Align(
             alignment: Alignment.center,

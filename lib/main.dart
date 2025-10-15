@@ -1,4 +1,5 @@
 import 'package:agys_depo_yonetim/pages/ayarlar.dart';
+import 'package:agys_depo_yonetim/pages/bolgeler.dart';
 import 'package:agys_depo_yonetim/services/root_gate.dart';
 import 'package:agys_depo_yonetim/services/settings_controller.dart';
 import 'package:flutter/material.dart';
@@ -19,7 +20,10 @@ class MyApp extends StatelessWidget {
       animation: SettingsController.instance,
       builder: (context, _) {
         return MaterialApp(
-          routes: {'/ayarlar': (_) => const AyarlarPage()},
+          routes: {
+            '/ayarlar': (_) => const AyarlarPage(),
+            '/bolge': (ctx) => const BolgePage(),
+          },
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
             useMaterial3: true,

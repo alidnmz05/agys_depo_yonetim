@@ -209,6 +209,11 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
         title: const Text('Beyanname Listesi'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.map),
+            tooltip: 'Bölge Yönetimi',
+            onPressed: () => Navigator.of(context).pushNamed('/bolge'),
+          ),
+          IconButton(
             icon: const Icon(Icons.qr_code_scanner),
             onPressed: () async {
               final result = await Navigator.of(context).push<String>(

@@ -3,6 +3,7 @@ import 'package:agys_depo_yonetim/pages/qr_kod.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../services/settings_controller.dart';
 import '../models/giris_kalan_bilgi_dto.dart';
 
 enum Durum { hepsi, uygun, eksik, fazla }
@@ -14,94 +15,6 @@ class BeyannameListePage extends StatefulWidget {
 }
 
 class _BeyannameListePageState extends State<BeyannameListePage> {
-  void _showKayitDetay(GirisKalanBilgiDto d) {
-    showModalBottomSheet(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        String _fmtDate(DateTime? t) {
-          if (t == null) return '';
-          return '${t.day.toString().padLeft(2, '0')}.${t.month.toString().padLeft(2, '0')}.${t.year}';
-        }
-
-        Widget row(String k, String? v) {
-          if (v == null || v.isEmpty) return const SizedBox.shrink();
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 160,
-                  child: Text(k, style: const TextStyle(color: Colors.black54)),
-                ),
-                const SizedBox(width: 8),
-                Expanded(child: Text(v)),
-              ],
-            ),
-          );
-        }
-
-        String? fmtKg(num? v) => v == null ? null : '${_fmtKg.format(v)} kg';
-
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.6,
-          minChildSize: 0.4,
-          maxChildSize: 0.95,
-          builder: (_, controller) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: ListView(
-                controller: controller,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.black26,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Kayıt Detayları',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 12),
-
-                  row('Alıcı Firma', d.aliciFirma),
-                  row('Beyanname No', d.beyannameNo),
-                  row('Beyanname Tarihi', _fmtDate(d.beyannameTarihi)),
-                  row(
-                    'Giren Kap',
-                    d.girenToplamBrutKg == null ? null : null,
-                  ), // kap alanı yoksa boş bırak
-                  row(
-                    'Çıkan Kap',
-                    d.cikanToplamBrutKg == null ? null : null,
-                  ), // kap alanı yoksa boş bırak
-                  row('Kalan Kap', d.kalanKap?.toString()),
-                  row('Eşya Tanımı', d.esyaTanimi),
-                  row('Çıkan Toplam Brüt Kg', fmtKg(d.cikanToplamBrutKg)),
-                  row('Giren Toplam Brüt Kg', fmtKg(d.girenToplamBrutKg)),
-                  row('Kalan Brüt Kg', fmtKg(d.kalanBrutKg)),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   final _api = ApiService();
   final _q = TextEditingController();
   final _fmtKg = NumberFormat('#,##0.##', 'tr_TR');
@@ -117,6 +30,7 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
     super.initState();
     _load();
     _q.addListener(_apply);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFirstRun());
   }
 
   @override
@@ -125,22 +39,105 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
     super.dispose();
   }
 
+  Future<void> _ensureFirstRun() async {
+    final sc = SettingsController.instance;
+    await sc.init();
+    await sc.load();
+    if (sc.firstRunDone) return;
+
+    bool value = sc.showLocation;
+    if (!mounted) return;
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          child: StatefulBuilder(
+            builder:
+                (context, setSt) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Konum Gösterimi',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Detaylarda cihaz konumunu göstermek ister misiniz?',
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Depodaki yeri göster'),
+                      value: value,
+                      onChanged: (v) => setSt(() => value = v),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Vazgeç'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Kaydet'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+          ),
+        );
+      },
+    );
+
+    if (saved == true) await sc.setShowLocation(value);
+    await sc.setFirstRunDone();
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final list = await _api.listGirisKalanBilgi(); // Ayarlardan okur
+      final list = await _api.listGirisKalanBilgi();
       _all = list;
       _apply();
     } catch (e) {
       _error = e.toString();
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
         });
+      }
     }
   }
 
@@ -173,7 +170,6 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
   }
 
   Durum _statusOf(GirisKalanBilgiDto d) {
-    // Basit kural: kalanBrutKg ≈ 0 → uygun, <0 → fazla, >0 → eksik
     final k = d.kalanBrutKg;
     if (k == null) return Durum.uygun;
     if (k.abs() < 1e-6) return Durum.uygun;
@@ -226,18 +222,13 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
             },
             tooltip: 'QR Tara',
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _load,
-            tooltip: 'Yenile',
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed:
                 () => Navigator.of(
                   context,
                 ).pushNamed('/ayarlar').then((_) => _load()),
-            tooltip: 'Ayarlar',
           ),
         ],
         bottom: PreferredSize(
@@ -286,11 +277,6 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
                     child: Text(_statusText(_filter)),
                   ),
                 ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: () {}, // TODO: tarih seçimi
-                  child: const Text('Bugün'),
-                ),
               ],
             ),
           ),
@@ -323,9 +309,7 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(
         child: Padding(
@@ -337,9 +321,7 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
         ),
       );
     }
-    if (_visible.isEmpty) {
-      return const Center(child: Text('Kayıt bulunamadı'));
-    }
+    if (_visible.isEmpty) return const Center(child: Text('Kayıt bulunamadı'));
     return ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: _visible.length,
@@ -394,16 +376,13 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
             ],
           ),
           children: [
-            const SizedBox(height: 6),
-            // Özet satırı
-            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: _pillButton(
                     label: 'Kayıt Detayları',
                     selected: true,
-                    onTap: () => _showKayitDetay(_visible[i]),
+                    onTap: () => _showKayitDetay(d),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -411,15 +390,11 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
                   child: _pillButton(
                     label: 'Saha Detayları',
                     selected: false,
-                    onTap: () {
-                      // TODO: saha bottom sheet burada açılacak
-                    },
+                    onTap: () => _showSahaDetay(d),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -456,64 +431,6 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
     );
   }
 
-  Widget _detailsSection({required String title, required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FC),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _kv(String k, String? v) {
-    if (v == null || v.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 130,
-            child: Text(k, style: const TextStyle(color: Colors.black54)),
-          ),
-          Expanded(child: Text(v)),
-        ],
-      ),
-    );
-  }
-
-  Widget _bullet(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          const Text('•  ', style: TextStyle(color: Colors.black54)),
-          Expanded(child: Text(text)),
-        ],
-      ),
-    );
-  }
-
-  String _fmtKayitKg(GirisKalanBilgiDto d) {
-    final kgIn = d.girenToplamBrutKg;
-    final kgOut = d.cikanToplamBrutKg;
-    final kg = (kgIn != null && kgOut != null) ? kgIn : (kgIn ?? kgOut ?? 0);
-    return '${_fmtKg.format(kg)} kg';
-  }
-
-  String _fmtSahaAdet(GirisKalanBilgiDto d) {
-    final adet = d.kalanKap; // eldeki en yakın alan
-    return adet == null ? '-' : '$adet adet';
-  }
-
   Widget _pillButton({
     required String label,
     required bool selected,
@@ -537,6 +454,186 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showKayitDetay(GirisKalanBilgiDto d) {
+    final sc = SettingsController.instance;
+    final showLoc = sc.showLocation;
+
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        String fmtDate(DateTime? t) {
+          if (t == null) return '';
+          return '${t.day.toString().padLeft(2, '0')}.${t.month.toString().padLeft(2, '0')}.${t.year}';
+        }
+
+        String? fmtKg(num? v) => v == null ? null : '${_fmtKg.format(v)} kg';
+        Widget row(String k, String? v) {
+          if (v == null || v.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 160,
+                  child: Text(k, style: const TextStyle(color: Colors.black54)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(v)),
+              ],
+            ),
+          );
+        }
+
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.95,
+          builder: (_, controller) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: ListView(
+                controller: controller,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Kayıt Detayları',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+
+                  row('Alıcı Firma', d.aliciFirma),
+                  row('Beyanname No', d.beyannameNo),
+                  row('Beyanname Tarihi', fmtDate(d.beyannameTarihi)),
+                  row('Kalan Kap', d.kalanKap?.toString()),
+                  row('Eşya Tanımı', d.esyaTanimi),
+                  row('Çıkan Toplam Brüt Kg', fmtKg(d.cikanToplamBrutKg)),
+                  row('Giren Toplam Brüt Kg', fmtKg(d.girenToplamBrutKg)),
+                  row('Kalan Brüt Kg', fmtKg(d.kalanBrutKg)),
+
+                  if (showLoc) ...[
+                    const SizedBox(height: 8),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Depodaki yeri',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Konum açık. İzin verilince koordinatlar burada görüntülenecek.',
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showSahaDetay(GirisKalanBilgiDto d) async {
+    final sc = SettingsController.instance;
+    final showLoc = sc.showLocation;
+
+    await showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) {
+        Widget row(String k, String? v) {
+          if (v == null || v.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 140,
+                  child: Text(k, style: const TextStyle(color: Colors.black54)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(v)),
+              ],
+            ),
+          );
+        }
+
+        String? fmtKg(num? v) => v == null ? null : '${_fmtKg.format(v)} kg';
+
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.45,
+          minChildSize: 0.35,
+          maxChildSize: 0.95,
+          builder: (_, controller) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: ListView(
+                controller: controller,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Saha Detayları',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+
+                  row('Kalan Kap', d.kalanKap?.toString()),
+                  row('Kalan Brüt', fmtKg(d.kalanBrutKg)),
+
+                  if (showLoc) ...[
+                    const SizedBox(height: 8),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Konum',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Konum açık. İzin verilince koordinatlar burada görüntülenecek.',
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

@@ -1,4 +1,3 @@
-// lib/pages/ayarlar_page.dart
 import 'package:flutter/material.dart';
 import '../services/settings_controller.dart';
 import '../services/api_service.dart';
@@ -14,8 +13,15 @@ class _AyarlarPageState extends State<AyarlarPage> {
   late final _base = TextEditingController(text: sc.baseUrl);
   late final _key = TextEditingController(text: sc.apiKey);
   late final _id = TextEditingController(text: sc.antrepoId.toString());
+  bool _showLoc = false;
   bool _testing = false;
   String? _msg;
+
+  @override
+  void initState() {
+    super.initState();
+    _showLoc = sc.showLocation;
+  }
 
   @override
   void dispose() {
@@ -29,6 +35,7 @@ class _AyarlarPageState extends State<AyarlarPage> {
     sc.baseUrl = _base.text.trim();
     sc.apiKey = _key.text.trim();
     sc.antrepoId = int.tryParse(_id.text.trim()) ?? 1;
+    await sc.setShowLocation(_showLoc);
     setState(() => _msg = 'Kaydedildi');
   }
 
@@ -64,6 +71,14 @@ class _AyarlarPageState extends State<AyarlarPage> {
             controller: _id,
             decoration: const InputDecoration(labelText: 'Antrepo ID'),
             keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            title: const Text('Depodaki yeri göster'),
+            value: _showLoc,
+            onChanged: (v) {
+              setState(() => _showLoc = v);
+            },
           ),
           const SizedBox(height: 12),
           Row(

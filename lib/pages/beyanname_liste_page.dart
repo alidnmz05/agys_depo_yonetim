@@ -216,14 +216,7 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
           IconButton(
             icon: const Icon(Icons.qr_code_scanner),
             onPressed: () async {
-              final result = await Navigator.of(context).push<String>(
-                MaterialPageRoute(builder: (_) => const ScannerPage()),
-              );
-              if (!mounted || result == null || result.isEmpty) return;
-              applyQrToForm(result);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('QR verileri forma uygulandı')),
-              );
+              Navigator.of(context).pushNamed('/qr/scan');
             },
             tooltip: 'QR Tara',
           ),

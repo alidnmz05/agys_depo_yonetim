@@ -2,6 +2,7 @@ import 'package:agys_depo_yonetim/pages/ayarlar.dart';
 import 'package:agys_depo_yonetim/pages/beyanname_liste_page.dart';
 import 'package:agys_depo_yonetim/pages/bolgeler.dart';
 import 'package:agys_depo_yonetim/pages/login_page.dart';
+import 'package:agys_depo_yonetim/pages/qr/qr_scan_page.dart';
 import 'package:agys_depo_yonetim/services/settings_controller.dart';
 import 'package:flutter/material.dart';
 // import 'pages/login_page.dart';
@@ -25,6 +26,7 @@ class MyApp extends StatelessWidget {
             '/ayarlar': (_) => const AyarlarPage(),
             '/bolge': (ctx) => const BolgePage(),
             '/login': (_) => const LoginPage(),
+            '/qr/scan': (_) => const QrScanPage(),
           },
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),

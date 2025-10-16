@@ -1,6 +1,6 @@
 import 'package:agys_depo_yonetim/pages/ayarlar.dart';
+import 'package:agys_depo_yonetim/pages/beyanname_liste_page.dart';
 import 'package:agys_depo_yonetim/pages/bolgeler.dart';
-import 'package:agys_depo_yonetim/services/root_gate.dart';
 import 'package:agys_depo_yonetim/services/settings_controller.dart';
 import 'package:flutter/material.dart';
 // import 'pages/login_page.dart';
@@ -29,7 +29,7 @@ class MyApp extends StatelessWidget {
             useMaterial3: true,
           ),
           debugShowCheckedModeBanner: false,
-          home: const RootGate(), // mevcut ana sayfanı saran gate
+          home: const BeyannameListePage(),
         );
       },
     );

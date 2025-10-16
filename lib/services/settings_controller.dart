@@ -53,4 +53,19 @@ class SettingsController extends ChangeNotifier {
   String get baseUrl =>
       _sp.getString('base_url') ?? 'http://213.159.6.209:65062';
   set baseUrl(String v) => _sp.setString('base_url', v);
+
+  Future<void> resetToFirstLaunch() async {
+    final p = await SharedPreferences.getInstance();
+    await p.remove(_kFirstRunDone);
+    await p.remove(_kShowLocation);
+    await p.remove('token'); // JWT
+    await p.remove('api_key'); // varsa
+    await p.remove('antrepo_id'); // istersen silme
+    // await p.remove('base_url');  // genelde bırakılır
+
+    // Bellek içi bayrakları sıfırla
+    _firstRunDone = false;
+    _showLocation = false;
+    notifyListeners();
+  }
 }

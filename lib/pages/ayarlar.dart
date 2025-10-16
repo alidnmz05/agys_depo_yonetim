@@ -1,3 +1,4 @@
+import 'package:agys_depo_yonetim/pages/beyanname_liste_page.dart';
 import 'package:flutter/material.dart';
 import '../services/settings_controller.dart';
 import '../services/api_service.dart';
@@ -59,6 +60,20 @@ class _AyarlarPageState extends State<AyarlarPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          FilledButton(
+            onPressed: () async {
+              final sc = SettingsController.instance;
+              await sc.init();
+              await sc.resetToFirstLaunch();
+              if (!context.mounted) return;
+              // Uygulamayı ilk açılıştaki akışa döndür
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const BeyannameListePage()),
+                (route) => false,
+              );
+            },
+            child: const Text('İlk açılışa dön'),
+          ),
           TextField(
             controller: _base,
             decoration: const InputDecoration(labelText: 'Base URL'),

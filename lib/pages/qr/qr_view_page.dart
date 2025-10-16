@@ -1,5 +1,7 @@
 // lib/pages/qr_view_page.dart
 import 'package:agys_depo_yonetim/models/qr_models.dart';
+import 'package:agys_depo_yonetim/pages/qr/qr_bind_page.dart';
+import 'package:agys_depo_yonetim/services/qr_service.dart';
 import 'package:flutter/material.dart';
 
 class QrViewPage extends StatelessWidget {
@@ -67,6 +69,35 @@ class QrViewPage extends StatelessWidget {
                     icon: const Icon(Icons.playlist_add_check),
                     label: const Text('Sayım Modu'),
                   ),
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Toplam: $total',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: () async {
+                    // mevcut koda yeni satır ekle
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder:
+                            (_) => QrBindPage(
+                              code: code,
+                              service: QrService(useMock: true),
+                            ),
+                      ),
+                    );
+                    if (context.mounted) {
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Ekle'),
+                ),
               ],
             ),
           ],

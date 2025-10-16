@@ -220,6 +220,11 @@ class _BeyannameListePageState extends State<BeyannameListePage> {
             },
             tooltip: 'QR Tara',
           ),
+          IconButton(
+            icon: const Icon(Icons.list_alt),
+            onPressed:
+                () => Navigator.pushNamed(context, '/qr/list'), // ← BURAYA
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
           IconButton(
             icon: const Icon(Icons.settings),

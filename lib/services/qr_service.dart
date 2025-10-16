@@ -11,30 +11,32 @@ class QrService {
   /// QR hakkında mevcut kayıt var mı?
   Future<QrInfo?> fetchInfo(String code) async {
     if (useMock) {
-      if (_mem.containsKey(code)) return _mem[code]; // EKLE
+      if (_mem.containsKey(code)) return _mem[code];
       if (code.contains('HAVE')) {
-        return QrInfo(
+        final info = QrInfo(
           code: code,
           items: [
             QrBindItem(beyannameId: 'B-1001', kalemId: 'K-1', miktar: 12),
             QrBindItem(beyannameId: 'B-1001', kalemId: 'K-2', miktar: 5.5),
           ],
         );
+        _mem[code] = info;
+        return info;
       }
       return null;
     }
-    // TODO: gerçek GET
+    // TODO: gerçek GET /qr/{code}
     return null;
   }
 
   /// QR'ı beyanname/kalemlerle ilişkilendir.
   Future<void> bind(String code, List<QrBindItem> items) async {
     if (useMock) {
-      await Future.delayed(const Duration(milliseconds: 400));
-      _mem[code] = QrInfo(code: code, items: List.of(items));
+      final prev = _mem[code]?.items ?? const <QrBindItem>[];
+      _mem[code] = QrInfo(code: code, items: [...prev, ...items]); // append
       return;
     }
-    // TODO: POST /qr/{code}/bind
+    // TODO: POST /qr/{code}/bind (sunucu tarafı da append yapmalı)
   }
 
   /// Beyanname arama
@@ -73,5 +75,13 @@ class QrService {
     if (useMock) return QrRole.viewer;
     // TODO: gerçek rol çözümlemesi
     return QrRole.viewer;
+  }
+
+  Future<List<QrInfo>> listAll() async {
+    if (useMock) {
+      return _mem.values.toList()..sort((a, b) => a.code.compareTo(b.code));
+    }
+    // TODO: GET /qr
+    return [];
   }
 }

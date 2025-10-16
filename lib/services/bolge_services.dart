@@ -6,146 +6,126 @@ import 'settings_controller.dart';
 import '../models/bolge.dart';
 import 'bolge_mock.dart';
 
-/// API hazır olana kadar mock veriyi kullanın. Hazır olduğunda false yapın.
+/// Mock açık: API kapalıyken yerel bellekten çalışır.
 const bool _useMock = true;
 
 class BolgeApi {
   BolgeApi._();
   static final instance = BolgeApi._();
 
-  // ---- HTTP endpoint yollarınızı backend'e göre uyarlayın ----
-  static const String _childrenPath = '/Bolge/Children';
-  static const String _pathPath = '/Bolge/Path';
-  static const String _treePath = '/Bolge/Tree';
-  static const String _createPath = '/Bolge';
-  static String _updatePath(int id) => '/Bolge/$id';
-  static String _deletePath(int id) => '/Bolge/$id';
+  final SettingsController _sc = SettingsController.instance;
 
-  // ---- MOCK STORE ----
-  final BolgeMockStore _mock = BolgeMockStore(
-    SettingsController.instance.antrepoId,
-  );
+  // Mock store ve düz cache
+  BolgeMockStore? _mock;
+  List<Bolge> _flat = const [];
 
-  // ---- HTTP yardımcıları ----
-  Future<http.Response> _get(String path, Map<String, String> qp) async {
-    final s = SettingsController.instance;
-    await s.init();
-    final uri = Uri.parse(
-      s.baseUrl + path,
-    ).replace(queryParameters: {...qp, 'apiKey': s.apiKey});
-    return http.get(uri);
-  }
+  Map<String, String> _authHeaders() => {
+    'Authorization': 'Bearer ${_sc.token}',
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+  };
 
-  Future<http.Response> _post(String path, Map body) async {
-    final s = SettingsController.instance;
-    await s.init();
-    final uri = Uri.parse(
-      s.baseUrl + path,
-    ).replace(queryParameters: {'apiKey': s.apiKey});
-    return http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(body),
-    );
-  }
-
-  Future<http.Response> _patch(String path, Map body) async {
-    final s = SettingsController.instance;
-    await s.init();
-    final uri = Uri.parse(
-      s.baseUrl + path,
-    ).replace(queryParameters: {'apiKey': s.apiKey});
-    return http.patch(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(body),
-    );
-  }
-
-  Future<http.Response> _delete(String path) async {
-    final s = SettingsController.instance;
-    await s.init();
-    final uri = Uri.parse(
-      s.baseUrl + path,
-    ).replace(queryParameters: {'apiKey': s.apiKey});
-    return http.delete(uri);
-  }
-
-  // ---- İŞLEVLER ----
-
-  Future<List<Bolge>> children({
-    required int parentId,
-    required int antrepoId,
-  }) async {
+  Future<void> refreshFlat({int? antrepoId}) async {
+    await _sc.init();
+    final id = antrepoId ?? _sc.antrepoId;
     if (_useMock) {
-      return _mock.children(parentId, antrepoId);
+      _mock ??= BolgeMockStore(id);
+      _flat = _mock!.flat;
+      return;
     }
-    final r = await _get(_childrenPath, {
-      'parentId': '$parentId',
-      'antrepoId': '$antrepoId',
-    });
+    final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri/antrepo/$id');
+    final r = await http.get(uri, headers: _authHeaders());
     if (r.statusCode >= 200 && r.statusCode < 300) {
-      final data = jsonDecode(utf8.decode(r.bodyBytes)) as List;
-      return data.map((e) => Bolge.fromJson(e)).toList();
+      final data = jsonDecode(utf8.decode(r.bodyBytes));
+      final list =
+          (data['data'] as List).map((e) => Bolge.fromJson(e)).toList();
+      _flat = list;
+      return;
     }
-    throw Exception('children ${r.statusCode}: ${r.body}');
+    throw Exception('antrepo list failed ${r.statusCode}: ${r.body}');
   }
 
-  Future<List<Bolge>> pathOf({required int id}) async {
+  List<Bolge> childrenLocal(int? parentId, {int? antrepoId}) {
     if (_useMock) {
-      return _mock.pathOf(id);
+      _mock ??= BolgeMockStore(antrepoId ?? _sc.antrepoId);
+      return _mock!.childrenLocal(parentId);
     }
-    final r = await _get(_pathPath, {'id': '$id'});
-    if (r.statusCode >= 200 && r.statusCode < 300) {
-      final data = jsonDecode(utf8.decode(r.bodyBytes)) as List;
-      return data.map((e) => Bolge.fromJson(e)).toList();
-    }
-    throw Exception('path ${r.statusCode}: ${r.body}');
+    final pid = parentId ?? 0;
+    final aId = antrepoId ?? _sc.antrepoId;
+    final byParent =
+        _flat
+            .where((e) => (e.parentId ?? 0) == pid && e.antrepoId == aId)
+            .toList()
+          ..sort((a, b) => a.sira.compareTo(b.sira));
+    return byParent.map((e) {
+      final cc = _flat.where((x) => (x.parentId ?? 0) == e.id).length;
+      return e.copyWith(childCount: cc);
+    }).toList();
   }
 
-  Future<List<Bolge>> tree({required int antrepoId}) async {
+  List<Bolge> pathLocal(int id) {
     if (_useMock) {
-      return _mock.tree(antrepoId);
+      _mock ??= BolgeMockStore(_sc.antrepoId);
+      return _mock!.pathLocal(id);
     }
-    final r = await _get(_treePath, {'antrepoId': '$antrepoId'});
-    if (r.statusCode >= 200 && r.statusCode < 300) {
-      final data = jsonDecode(utf8.decode(r.bodyBytes)) as List;
-      return data.map((e) => Bolge.fromJson(e)).toList();
+    final out = <Bolge>[];
+    final byId = {for (final e in _flat) e.id: e};
+    var cur = byId[id];
+    while (cur != null) {
+      out.insert(0, cur);
+      final pid = cur.parentId ?? 0;
+      cur = pid == 0 ? null : byId[pid];
     }
-    throw Exception('tree ${r.statusCode}: ${r.body}');
+    return out;
   }
 
   Future<Bolge> create({
     required int antrepoId,
     required int? parentId,
-    required String ad,
-    String? kod,
+    required String kod,
     int? sira,
+    String? tip,
+    String? aciklama,
+    bool aktif = true,
   }) async {
+    await _sc.init();
     if (_useMock) {
-      return _mock.create(
-        antrepoId: antrepoId,
+      _mock ??= BolgeMockStore(antrepoId);
+      final b = _mock!.create(
         parentId: parentId,
-        ad: ad,
         kod: kod,
         sira: sira,
+        tip: tip,
+        aciklama: aciklama,
+        aktif: aktif,
       );
+      _flat = _mock!.flat;
+      return b;
     }
-    final r = await _post(_createPath, {
+    final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri');
+    final body = {
+      'ustYerlesimId': parentId,
       'antrepoId': antrepoId,
-      'parentId': parentId,
-      'ad': ad,
       'kod': kod,
-      'sira': sira,
-    });
+      'sira': sira ?? 0,
+      'tip': tip,
+      'aciklama': aciklama,
+      'aktif': aktif,
+    };
+    final r = await http.post(
+      uri,
+      headers: _authHeaders(),
+      body: jsonEncode(body),
+    );
     if (r.statusCode >= 200 && r.statusCode < 300) {
       final data = jsonDecode(utf8.decode(r.bodyBytes));
-      return Bolge.fromJson(data);
+      final b = Bolge.fromJson(data['data']);
+      _flat = [..._flat, b];
+      return b;
     }
-    throw Exception('create ${r.statusCode}: ${r.body}');
+    throw Exception('create failed ${r.statusCode}: ${r.body}');
   }
 
-  /// Bir isme göre çoklu ekleme. Backend'de toplu uç yoksa tek tek create çağrılır.
   Future<List<Bolge>> createMany({
     required int antrepoId,
     required int? parentId,
@@ -153,33 +133,83 @@ class BolgeApi {
     required int count,
     int start = 1,
     String separator = '-',
+    int? siraStart,
+    int siraStep = 10,
   }) async {
-    if (count <= 0) return const [];
+    if (_useMock) {
+      _mock ??= BolgeMockStore(antrepoId);
+      final list = _mock!.createMany(
+        parentId: parentId,
+        baseName: baseName,
+        count: count,
+        start: start,
+        separator: separator,
+      );
+      _flat = _mock!.flat;
+      return list;
+    }
     final out = <Bolge>[];
     for (var i = 0; i < count; i++) {
-      final name = '$baseName$separator${start + i}';
-      out.add(await create(antrepoId: antrepoId, parentId: parentId, ad: name));
+      final kod = '$baseName$separator${start + i}';
+      final sira = siraStart == null ? null : siraStart + i * siraStep;
+      out.add(
+        await create(
+          antrepoId: antrepoId,
+          parentId: parentId,
+          kod: kod,
+          sira: sira,
+        ),
+      );
     }
     return out;
   }
 
-  Future<void> rename({required int id, required String ad}) async {
+  Future<Bolge> update(Bolge b) async {
+    await _sc.init();
     if (_useMock) {
-      _mock.rename(id, ad);
-      return;
+      _mock ??= BolgeMockStore(_sc.antrepoId);
+      final nb = _mock!.update(b);
+      _flat = _mock!.flat;
+      return nb;
     }
-    final r = await _patch(_updatePath(id), {'ad': ad});
-    if (r.statusCode >= 200 && r.statusCode < 300) return;
-    throw Exception('rename ${r.statusCode}: ${r.body}');
+    final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri');
+    final r = await http.put(
+      uri,
+      headers: _authHeaders(),
+      body: jsonEncode({
+        'id': b.id,
+        'ustYerlesimId': b.parentId,
+        'antrepoId': b.antrepoId,
+        'kod': b.ad,
+        'sira': b.sira,
+        'tip': b.tip,
+        'aciklama': b.aciklama,
+        'aktif': b.aktif,
+      }),
+    );
+    if (r.statusCode >= 200 && r.statusCode < 300) {
+      final data = jsonDecode(utf8.decode(r.bodyBytes));
+      final nb = Bolge.fromJson(data['data']);
+      _flat = _flat.map((x) => x.id == nb.id ? nb : x).toList();
+      return nb;
+    }
+    throw Exception('update failed ${r.statusCode}: ${r.body}');
   }
 
-  Future<void> deleteNode({required int id}) async {
+  Future<void> deleteNode(int id) async {
+    await _sc.init();
     if (_useMock) {
-      _mock.deleteNode(id);
+      _mock ??= BolgeMockStore(_sc.antrepoId);
+      _mock!.deleteNode(id);
+      _flat = _mock!.flat;
       return;
     }
-    final r = await _delete(_deletePath(id));
-    if (r.statusCode >= 200 && r.statusCode < 300) return;
-    throw Exception('delete ${r.statusCode}: ${r.body}');
+    final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri/$id');
+    final r = await http.delete(uri, headers: _authHeaders());
+    if (r.statusCode >= 200 && r.statusCode < 300) {
+      _flat = _flat.where((e) => e.id != id).toList();
+      return;
+    }
+    throw Exception('delete failed ${r.statusCode}: ${r.body}');
   }
 }

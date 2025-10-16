@@ -15,14 +15,14 @@ class _BolgePageState extends State<BolgePage> {
   final sc = SettingsController.instance;
   final _q = TextEditingController();
 
-  int? _currentParentId; // null -> kök
+  int? _currentParentId; // null -> kök (parentId=0)
   List<Bolge> _items = [];
   List<Bolge> _filtered = [];
   bool _loading = true;
   String? _err;
   List<Bolge> _path = [];
 
-  // Çoklu seçim durumu
+  // Çoklu seçim
   bool _selectMode = false;
   final Set<int> _selected = {};
 
@@ -30,7 +30,7 @@ class _BolgePageState extends State<BolgePage> {
   void initState() {
     super.initState();
     _q.addListener(_apply);
-    _load();
+    _init();
   }
 
   @override
@@ -39,30 +39,33 @@ class _BolgePageState extends State<BolgePage> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _init() async {
     setState(() {
       _loading = true;
       _err = null;
-      _selected.clear();
-      _selectMode = false;
     });
     try {
       await sc.init();
-      final antrepoId = sc.antrepoId;
-      final parentId = _currentParentId;
-      if (parentId == null) {
-        _items = await api.children(parentId: 0, antrepoId: antrepoId);
-        _path = [];
-      } else {
-        _items = await api.children(parentId: parentId, antrepoId: antrepoId);
-        _path = await api.pathOf(id: parentId);
-      }
-      _apply();
+      // Login sonrası bir kez düz listeyi çek
+      await api.refreshFlat(antrepoId: sc.antrepoId);
+      _reloadLocal();
     } catch (e) {
       _err = e.toString();
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _reloadLocal() {
+    final parentId = _currentParentId;
+    if (parentId == null) {
+      _items = api.childrenLocal(null, antrepoId: sc.antrepoId);
+      _path = [];
+    } else {
+      _items = api.childrenLocal(parentId, antrepoId: sc.antrepoId);
+      _path = api.pathLocal(parentId);
+    }
+    _apply();
   }
 
   void _apply() {
@@ -72,14 +75,7 @@ class _BolgePageState extends State<BolgePage> {
       return;
     }
     setState(() {
-      _filtered =
-          _items
-              .where(
-                (e) =>
-                    e.ad.toLowerCase().contains(q) ||
-                    (e.kod ?? '').toLowerCase().contains(q),
-              )
-              .toList();
+      _filtered = _items.where((e) => e.ad.toLowerCase().contains(q)).toList();
     });
   }
 
@@ -89,12 +85,12 @@ class _BolgePageState extends State<BolgePage> {
       return;
     }
     _currentParentId = b.id;
-    await _load();
+    _reloadLocal();
   }
 
   Future<void> _goUpTo(int? parentId) async {
     _currentParentId = parentId;
-    await _load();
+    _reloadLocal();
   }
 
   Future<void> _createNode({required int? parentId}) async {
@@ -103,11 +99,12 @@ class _BolgePageState extends State<BolgePage> {
       builder: (_) => const _CreateManyDialog(),
     );
     if (res == null) return;
+
     if (res.count <= 1) {
       await api.create(
         antrepoId: sc.antrepoId,
         parentId: parentId,
-        ad: res.baseName,
+        kod: res.baseName,
       );
     } else {
       await api.createMany(
@@ -119,7 +116,7 @@ class _BolgePageState extends State<BolgePage> {
         separator: res.separator,
       );
     }
-    await _load();
+    _reloadLocal();
   }
 
   Future<void> _rename(Bolge b) async {
@@ -129,8 +126,8 @@ class _BolgePageState extends State<BolgePage> {
       initial: b.ad,
     );
     if (ad == null || ad.isEmpty || ad == b.ad) return;
-    await api.rename(id: b.id, ad: ad);
-    await _load();
+    await api.update(b.copyWith(ad: ad));
+    _reloadLocal();
   }
 
   Future<void> _delete(Bolge b) async {
@@ -139,7 +136,7 @@ class _BolgePageState extends State<BolgePage> {
       builder:
           (_) => AlertDialog(
             title: const Text('Sil'),
-            content: Text('\"${b.ad}\" silinsin mi?'),
+            content: Text('"${b.ad}" silinsin mi?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
@@ -153,10 +150,11 @@ class _BolgePageState extends State<BolgePage> {
           ),
     );
     if (ok != true) return;
-    await api.deleteNode(id: b.id);
-    await _load();
+    await api.deleteNode(b.id);
+    _reloadLocal();
   }
 
+  // Çoklu silme
   Future<void> _deleteSelected() async {
     if (_selected.isEmpty) return;
     final ok = await showDialog<bool>(
@@ -179,9 +177,11 @@ class _BolgePageState extends State<BolgePage> {
     );
     if (ok != true) return;
     for (final id in _selected.toList()) {
-      await api.deleteNode(id: id);
+      await api.deleteNode(id);
     }
-    await _load();
+    _selected.clear();
+    _selectMode = false;
+    _reloadLocal();
   }
 
   void _toggleSelected(int id) {
@@ -198,8 +198,9 @@ class _BolgePageState extends State<BolgePage> {
   void _enterSelectMode(Bolge b) {
     setState(() {
       _selectMode = true;
-      _selected.clear();
-      _selected.add(b.id);
+      _selected
+        ..clear()
+        ..add(b.id);
     });
   }
 
@@ -279,7 +280,13 @@ class _BolgePageState extends State<BolgePage> {
                   ),
                 ]
                 : [
-                  IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: () async {
+                      await api.refreshFlat(antrepoId: sc.antrepoId);
+                      _reloadLocal();
+                    },
+                  ),
                   IconButton(
                     icon: const Icon(Icons.add),
                     onPressed: () => _createNode(parentId: _currentParentId),
@@ -293,7 +300,7 @@ class _BolgePageState extends State<BolgePage> {
               controller: _q,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search),
-                hintText: 'Bölge veya kod ara',
+                hintText: 'Bölge ara',
                 isDense: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -335,7 +342,8 @@ class _BolgePageState extends State<BolgePage> {
                         )
                         : null,
                 title: Text(b.ad),
-                subtitle: b.kod == null ? null : Text(b.kod!),
+                subtitle:
+                    b.childCount > 0 ? Text('${b.childCount} alt öğe') : null,
                 trailing:
                     _selectMode
                         ? null
@@ -343,14 +351,7 @@ class _BolgePageState extends State<BolgePage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (b.childCount > 0)
-                              Text(
-                                '${b.childCount}',
-                                style: const TextStyle(color: Colors.black54),
-                              ),
-                            IconButton(
-                              icon: const Icon(Icons.drive_file_move),
-                              onPressed: () => _open(b),
-                            ),
+                              const Icon(Icons.chevron_right),
                             PopupMenuButton<String>(
                               onSelected: (v) {
                                 switch (v) {

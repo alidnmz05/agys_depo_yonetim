@@ -1,176 +1,136 @@
+// lib/services/bolge_mock.dart
 import '../models/bolge.dart';
 
 class BolgeMockStore {
-  // parentId -> list
-  final Map<int, List<Bolge>> _byParent = {};
-  final Map<int, Bolge> _byId = {};
+  final int antrepoId;
   int _seq = 1000;
+  final Map<int, Bolge> _byId = {};
+  final Map<int, List<int>> _children = {}; // parentId -> child ids
+  List<Bolge> get flat => _byId.values.toList();
 
-  BolgeMockStore(int antrepoId) {
-    // örnek ağaç
-    _seed(antrepoId);
+  BolgeMockStore(this.antrepoId) {
+    seed();
   }
 
-  void _seed(int antrepoId) {
-    // kök çocukları
-    final koridor = _add(parentId: 0, antrepoId: antrepoId, ad: 'Koridor-A');
-    final koridor2 = _add(parentId: 0, antrepoId: antrepoId, ad: 'Koridor-B');
-    final raf1 = _add(parentId: koridor.id, antrepoId: antrepoId, ad: 'Raf-01');
-    _add(parentId: koridor.id, antrepoId: antrepoId, ad: 'Raf-02');
-    _add(parentId: koridor2.id, antrepoId: antrepoId, ad: 'Raf-01');
-    _add(parentId: raf1.id, antrepoId: antrepoId, ad: 'Göz-01');
-    _add(parentId: raf1.id, antrepoId: antrepoId, ad: 'Göz-02');
+  void seed() {
+    _byId.clear();
+    _children.clear();
+    _seq = 1000;
+
+    // Kök (parentId=0 kabul ediyoruz)
+    // İlk seviye
+    final korA = _add(parentId: 0, kod: 'Koridor-A', sira: 10);
+    final korB = _add(parentId: 0, kod: 'Koridor-B', sira: 20);
+
+    // İkinci seviye
+    final rafA1 = _add(parentId: korA.id, kod: 'Raf-1', sira: 10);
+    _add(parentId: korA.id, kod: 'Raf-2', sira: 20);
+    _add(parentId: korB.id, kod: 'Raf-1', sira: 10);
+
+    // Üçüncü seviye
+    _add(parentId: rafA1.id, kod: 'Goz-1', sira: 10);
+    _add(parentId: rafA1.id, kod: 'Goz-2', sira: 20);
   }
 
-  Bolge _add({
-    required int parentId,
-    required int antrepoId,
-    required String ad,
-    String? kod,
-    int? sira,
-  }) {
+  Bolge _add({required int parentId, required String kod, int? sira}) {
     final id = _seq++;
-    final list = _byParent.putIfAbsent(parentId, () => []);
-    final node = Bolge(
+    final b = Bolge(
       id: id,
       antrepoId: antrepoId,
       parentId: parentId == 0 ? null : parentId,
-      ad: ad,
-      kod: kod,
-      sira: sira ?? list.length,
+      ad: kod,
+      sira: sira ?? (_children[parentId]?.length ?? 0) * 10,
+      tip: null,
+      aciklama: null,
+      aktif: true,
       childCount: 0,
     );
-    list.add(node);
-    _byId[id] = node;
-    // parent’ın childCount’unu güncellemek yerine dinamik hesaplayacağız
-    return node;
+    _byId[id] = b;
+    final list = _children.putIfAbsent(parentId, () => []);
+    list.add(id);
+    return b;
   }
 
-  List<Bolge> children(int parentId, int antrepoId) {
-    final raw = _byParent[parentId] ?? const [];
-    return raw
-        .where((e) => e.antrepoId == antrepoId)
+  List<Bolge> childrenLocal(int? parentId) {
+    final pid = parentId ?? 0;
+    final ids = _children[pid] ?? const [];
+    final items =
+        ids.map((id) => _byId[id]!).toList()
+          ..sort((a, b) => a.sira.compareTo(b.sira));
+    return items
         .map(
-          (e) => e.copyWith(childCount: (_byParent[e.id] ?? const []).length),
-        )
-        .toList()
-      ..sort((a, b) => a.sira.compareTo(b.sira));
-  }
-
-  List<Bolge> pathOf(int id) {
-    final path = <Bolge>[];
-    var cur = _byId[id];
-    while (cur != null) {
-      path.insert(0, cur);
-      final pid = cur.parentId ?? 0;
-      cur = pid == 0 ? null : _byId[pid];
-    }
-    return path;
-  }
-
-  List<Bolge> tree(int antrepoId) {
-    // düz liste döndür (id,parentId,ad,sira,childCount)
-    return _byId.values
-        .where((e) => e.antrepoId == antrepoId)
-        .map(
-          (e) => e.copyWith(childCount: (_byParent[e.id] ?? const []).length),
+          (e) => e.copyWith(childCount: (_children[e.id] ?? const []).length),
         )
         .toList();
   }
 
+  List<Bolge> pathLocal(int id) {
+    final out = <Bolge>[];
+    Bolge? cur = _byId[id];
+    while (cur != null) {
+      out.insert(0, cur);
+      final pid = cur.parentId ?? 0;
+      cur = pid == 0 ? null : _byId[pid];
+    }
+    return out;
+  }
+
   Bolge create({
-    required int antrepoId,
     required int? parentId,
-    required String ad,
-    String? kod,
+    required String kod,
     int? sira,
+    String? tip,
+    String? aciklama,
+    bool aktif = true,
   }) {
     final pid = parentId ?? 0;
-    final node = _add(
-      parentId: pid,
-      antrepoId: antrepoId,
-      ad: ad,
-      kod: kod,
-      sira: sira,
-    );
-    return node.copyWith(childCount: (_byParent[node.id] ?? const []).length);
+    final node = _add(parentId: pid, kod: kod, sira: sira);
+    return node.copyWith(childCount: (_children[node.id] ?? const []).length);
   }
 
-  int bulk({
-    required int parentId,
-    required String pattern,
+  List<Bolge> createMany({
+    required int? parentId,
+    required String baseName,
     required int count,
     int start = 1,
-    int? sira,
+    String separator = '-',
   }) {
-    int created = 0;
-    for (int i = 0; i < count; i++) {
-      final n = start + i;
-      final name = _subst(pattern, n);
-      final parent = parentId == 0 ? null : _byId[parentId];
-      _add(
-        parentId: parentId,
-        antrepoId: parent?.antrepoId ?? 1,
-        ad: name,
-        sira: sira,
-      );
-      created++;
+    final out = <Bolge>[];
+    for (var i = 0; i < count; i++) {
+      final name = '$baseName$separator${start + i}';
+      out.add(create(parentId: parentId, kod: name));
     }
-    return created;
+    return out;
   }
 
-  void rename(int id, String ad) {
-    final n = _byId[id];
-    if (n == null) return;
-    final updated = n.copyWith(ad: ad);
-    _byId[id] = updated;
-    final list = _byParent[n.parentId ?? 0];
-    if (list == null) return;
-    final idx = list.indexWhere((e) => e.id == id);
-    if (idx >= 0) list[idx] = updated;
+  Bolge update(Bolge b) {
+    final cur = _byId[b.id];
+    if (cur == null) return b;
+    final nb = cur.copyWith(
+      ad: b.ad,
+      sira: b.sira,
+      tip: b.tip,
+      aciklama: b.aciklama,
+      // aktif: b.aktif,
+    );
+    _byId[b.id] = nb;
+    return nb;
   }
 
   void deleteNode(int id) {
-    final n = _byId.remove(id);
-    if (n == null) return;
-    _byParent[n.parentId ?? 0]?.removeWhere((e) => e.id == id);
-    // altları da basitçe temizle
-    final stack = [id];
+    final cur = _byId.remove(id);
+    if (cur == null) return;
+    final pid = cur.parentId ?? 0;
+    _children[pid]?.remove(id);
+    // recursive
+    final stack = <int>[id];
     while (stack.isNotEmpty) {
-      final pid = stack.removeLast();
-      final children = _byParent.remove(pid) ?? const [];
-      for (final c in children) {
-        _byId.remove(c.id);
-        stack.add(c.id);
+      final x = stack.removeLast();
+      final kids = _children.remove(x) ?? const [];
+      for (final cid in kids) {
+        _byId.remove(cid);
+        stack.add(cid);
       }
     }
-  }
-
-  String _subst(String pattern, int n) {
-    final hasNum =
-        RegExp(r'\{0*1\}').hasMatch(pattern) || pattern.contains('{1}');
-    final hasAZ = pattern.contains('{A}');
-    final hasaz = pattern.contains('{a}');
-    String x = pattern;
-    if (hasNum) {
-      final m = RegExp(r'\{(0*)(1)\}').firstMatch(pattern);
-      if (m != null) {
-        final pad = m.group(1)!;
-        final width = 1 + pad.length;
-        final s = n.toString().padLeft(width, '0');
-        x = x.replaceFirst(m.group(0)!, s);
-      } else {
-        x = x.replaceFirst('{1}', n.toString());
-      }
-    }
-    if (hasAZ) {
-      final ch = String.fromCharCode('A'.codeUnitAt(0) + (n - 1) % 26);
-      x = x.replaceFirst('{A}', ch);
-    }
-    if (hasaz) {
-      final ch = String.fromCharCode('a'.codeUnitAt(0) + (n - 1) % 26);
-      x = x.replaceFirst('{a}', ch);
-    }
-    return x;
   }
 }

@@ -1,5 +1,8 @@
+// lib/pages/login_page.dart
+import 'package:agys_depo_yonetim/models/auth_api.dart';
+import 'package:agys_depo_yonetim/pages/beyanname_liste_page.dart';
 import 'package:flutter/material.dart';
-import 'beyanname_liste_page.dart';
+import '../services/settings_controller.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -10,44 +13,61 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController();
-  final _antrepoKoduCtrl = TextEditingController();
-  final _sifreCtrl = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _antrepoKodu = TextEditingController();
+
+  final _auth = AuthApi();
+  final _sc = SettingsController.instance;
 
   bool _loading = false;
-  bool _sifreGoster = false;
+  String? _error;
 
-  // Hardcoded credentials
-  static const _dogruEmail = 'adamar.antrepo@dalyanygm.com';
-  static const _dogruAntrepoKodu = 'C35000352';
-  static const _dogruSifre = '1234';
+  @override
+  void initState() {
+    super.initState();
+    _bootstrap();
+  }
 
-  void _girisYap() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _bootstrap() async {
+    await _sc.init();
+  }
 
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    _antrepoKodu.dispose();
+    super.dispose();
+  }
 
-    // Simüle edilmiş yükleme
-    await Future.delayed(const Duration(seconds: 1));
-
-    if (_emailCtrl.text == _dogruEmail &&
-        _antrepoKoduCtrl.text == _dogruAntrepoKodu &&
-        _sifreCtrl.text == _dogruSifre) {
-      if (!mounted) return;
-
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const BeyannameListePage()),
+  Future<void> _submit() async {
+    final ok = _formKey.currentState?.validate() ?? false;
+    if (!ok) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await _auth.login(
+        eposta: _email.text.trim(),
+        sifre: _password.text,
+        antrepoKodu: _antrepoKodu.text.trim(),
       );
-    } else {
       if (!mounted) return;
-      setState(() => _loading = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('E-posta, antrepo kodu veya şifre hatalı!'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (res.success && (res.token ?? '').isNotEmpty) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const BeyannameListePage()),
+          (route) => false,
+        );
+      } else {
+        setState(() => _error = res.message ?? 'Giriş başarısız');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -56,105 +76,104 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: SafeArea(
         child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo veya başlık
-                  Icon(
-                    Icons.inventory_2,
-                    size: 80,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   Text(
-                    'Antrepo Yönetim',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Giriş Yapın',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 48),
-
-                  // E-posta
-                  TextFormField(
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'E-posta',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'E-posta gerekli';
-                      if (!v.contains('@')) return 'Geçerli e-posta girin';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Antrepo Kodu
-                  TextFormField(
-                    controller: _antrepoKoduCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Antrepo Kodu',
-                      prefixIcon: Icon(Icons.warehouse_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Antrepo kodu gerekli';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Şifre
-                  TextFormField(
-                    controller: _sifreCtrl,
-                    obscureText: !_sifreGoster,
-                    decoration: InputDecoration(
-                      labelText: 'Şifre',
-                      prefixIcon: const Icon(Icons.lock_outlined),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _sifreGoster ? Icons.visibility_off : Icons.visibility,
-                        ),
-                        onPressed: () => setState(() => _sifreGoster = !_sifreGoster),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Şifre gerekli';
-                      return null;
-                    },
+                    'Giriş',
+                    style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 24),
-
-                  // Giriş Butonu
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: FilledButton(
-                      onPressed: _loading ? null : _girisYap,
-                      child: _loading
-                          ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: MaterialBanner(
+                        content: Text(
+                          _error!,
+                          style: const TextStyle(color: Colors.white),
                         ),
-                      )
-                          : const Text('Giriş Yap', style: TextStyle(fontSize: 16)),
+                        backgroundColor: Colors.red,
+                        actions: [
+                          TextButton(
+                            onPressed: () => setState(() => _error = null),
+                            child: const Text(
+                              'Kapat',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _email,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'E-posta',
+                            prefixIcon: Icon(Icons.email),
+                          ),
+                          validator: (v) {
+                            final s = v?.trim() ?? '';
+                            if (s.isEmpty) return 'E-posta zorunlu';
+                            if (!s.contains('@')) {
+                              return 'Geçerli bir e-posta girin';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _password,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Şifre',
+                            prefixIcon: Icon(Icons.lock),
+                          ),
+                          validator:
+                              (v) =>
+                                  (v == null || v.isEmpty)
+                                      ? 'Şifre zorunlu'
+                                      : null,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _antrepoKodu,
+                          decoration: const InputDecoration(
+                            labelText: 'Antrepo Kodu',
+                            prefixIcon: Icon(Icons.warehouse),
+                          ),
+                          validator:
+                              (v) =>
+                                  (v == null || v.trim().isEmpty)
+                                      ? 'Antrepo kodu zorunlu'
+                                      : null,
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: _loading ? null : _submit,
+                            child:
+                                _loading
+                                    ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : const Text('Giriş yap'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -164,13 +183,5 @@ class _LoginPageState extends State<LoginPage> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _emailCtrl.dispose();
-    _antrepoKoduCtrl.dispose();
-    _sifreCtrl.dispose();
-    super.dispose();
   }
 }

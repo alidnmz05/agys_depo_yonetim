@@ -1,78 +1,78 @@
-// lib/models/bolge.dart
-class Bolge {
-  final int id;
-  final int antrepoId;
-  final int? parentId; // ustYerlesimId
-  final String ad; // maps to 'kod' from API
-  final int sira;
-  final String? tip;
-  final String? aciklama;
-  final bool? aktif;
-  final int childCount; // computed client-side from flat cache
+// lib/services/auth_api.dart
+import 'dart:convert';
+import 'package:agys_depo_yonetim/services/settings_controller.dart';
+import 'package:http/http.dart' as http;
 
-  const Bolge({
-    required this.id,
-    required this.antrepoId,
-    required this.parentId,
-    required this.ad,
-    required this.sira,
-    this.tip,
-    this.aciklama,
-    this.aktif,
-    this.childCount = 0,
+class AuthResult {
+  final bool success;
+  final String? token;
+  final int? kullaniciId;
+  final int? rolId;
+  final int? firmaId;
+  final int? antrepoId;
+  final String? antrepoKodu;
+  final String? message;
+
+  AuthResult({
+    required this.success,
+    this.token,
+    this.kullaniciId,
+    this.rolId,
+    this.firmaId,
+    this.antrepoId,
+    this.antrepoKodu,
+    this.message,
   });
 
-  Bolge copyWith({
-    int? id,
-    int? antrepoId,
-    int? parentId,
-    String? ad,
-    int? sira,
-    String? tip,
-    String? aciklama,
-    bool? aktif,
-    int? childCount,
-  }) => Bolge(
-    id: id ?? this.id,
-    antrepoId: antrepoId ?? this.antrepoId,
-    parentId: parentId ?? this.parentId,
-    ad: ad ?? this.ad,
-    sira: sira ?? this.sira,
-    tip: tip ?? this.tip,
-    aciklama: aciklama ?? this.aciklama,
-    aktif: aktif ?? this.aktif,
-    childCount: childCount ?? this.childCount,
+  factory AuthResult.fromJson(Map<String, dynamic> j) => AuthResult(
+    success: j['success'] == true,
+    token: j['token']?.toString(),
+    kullaniciId: j['kullanici']?['id'] as int?,
+    rolId: j['kullanici']?['rolId'] as int?,
+    firmaId: j['kullanici']?['firmaId'] as int?,
+    antrepoId: j['kullanici']?['antrepoId'] as int?,
+    antrepoKodu: j['kullanici']?['antrepoKodu']?.toString(),
+    message: j['message']?.toString(),
   );
+}
 
-  factory Bolge.fromJson(Map<String, dynamic> j) => Bolge(
-    id: j['id'] as int,
-    antrepoId: j['antrepoId'] as int,
-    parentId: j['ustYerlesimId'] as int?,
-    ad: (j['kod'] ?? '').toString(),
-    sira: (j['sira'] ?? 0) as int,
-    tip: j['tip']?.toString(),
-    aciklama: j['aciklama']?.toString(),
-    aktif: j['aktif'] is bool ? j['aktif'] as bool : null,
-  );
+class AuthApi {
+  final SettingsController _sc = SettingsController.instance;
 
-  Map<String, dynamic> toCreateBody() => {
-    'ustYerlesimId': parentId,
-    'antrepoId': antrepoId,
-    'kod': ad,
-    'sira': sira,
-    'tip': tip,
-    'aciklama': aciklama,
-    'aktif': aktif ?? true,
-  };
+  Future<AuthResult> login({
+    required String eposta,
+    required String sifre,
+    required String antrepoKodu,
+  }) async {
+    await _sc.init();
+    final uri = Uri.parse('${_sc.baseUrl}/api/Auth/login');
+    final r = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: jsonEncode({
+        'eposta': eposta,
+        'sifre': sifre,
+        'antrepoKodu': antrepoKodu,
+      }),
+    );
 
-  Map<String, dynamic> toUpdateBody() => {
-    'id': id,
-    'ustYerlesimId': parentId,
-    'antrepoId': antrepoId,
-    'kod': ad,
-    'sira': sira,
-    'tip': tip,
-    'aciklama': aciklama,
-    'aktif': aktif,
-  };
+    final data = jsonDecode(utf8.decode(r.bodyBytes));
+    if (r.statusCode == 200 && data is Map<String, dynamic>) {
+      final res = AuthResult.fromJson(data);
+      if (res.success && res.token != null) {
+        _sc.token = res.token!;
+        if (res.antrepoId != null) {
+          _sc.antrepoId = res.antrepoId!;
+        }
+      }
+      return res;
+    }
+    if (data is Map<String, dynamic>) {
+      return AuthResult.fromJson(data);
+    }
+    return AuthResult(success: false, message: 'Login failed ${r.statusCode}');
+  }
 }

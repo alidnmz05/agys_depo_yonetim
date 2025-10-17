@@ -12,7 +12,7 @@ class QrListPage extends StatefulWidget {
 }
 
 class _QrListPageState extends State<QrListPage> {
-  final QrService _service = QrService(useMock: true);
+  final QrService _service = QrService(useMock: false);
   late Future<List<QrInfo>> _future;
 
   @override

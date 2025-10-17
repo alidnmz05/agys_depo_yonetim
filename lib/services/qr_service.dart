@@ -1,18 +1,43 @@
 // lib/services/qr_service.dart
 import 'dart:async';
 import '../models/qr_models.dart';
+import '../services/api_service.dart' show ApiService;
 
-/// QrService gerçek API hazır olana kadar mock destekli çalışır.
+typedef _Getter<T> = T? Function();
+
+T? _safe<T>(T? Function() f) {
+  try {
+    return f();
+  } catch (_) {
+    return null;
+  }
+}
+
+String _norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[\s/.\-_,]'), '');
+
+String _pickFromMap(
+  Map<String, dynamic> m,
+  List<String> keys, {
+  String def = '',
+}) {
+  for (final k in keys) {
+    final v = m[k];
+    if (v != null && v.toString().trim().isNotEmpty) return v.toString();
+  }
+  return def;
+}
+
+/// QR servisi: Mevcut yapıyı bozmaz. Mock + API.
 class QrService {
   QrService({this.useMock = true});
   final bool useMock;
+
   static final Map<String, QrInfo> _mem = {};
 
-  /// QR hakkında mevcut kayıt var mı?
   Future<QrInfo?> fetchInfo(String code) async {
     if (useMock) {
       if (_mem.containsKey(code)) return _mem[code];
-      if (code.contains('HAVE')) {
+      if (code.toUpperCase().contains('HAVE')) {
         final info = QrInfo(
           code: code,
           items: [
@@ -29,59 +54,208 @@ class QrService {
     return null;
   }
 
-  /// QR'ı beyanname/kalemlerle ilişkilendir.
   Future<void> bind(String code, List<QrBindItem> items) async {
     if (useMock) {
-      final prev = _mem[code]?.items ?? const <QrBindItem>[];
-      _mem[code] = QrInfo(code: code, items: [...prev, ...items]); // append
+      final prev = _safe(() => _mem[code]?.items) ?? const <QrBindItem>[];
+      _mem[code] = QrInfo(code: code, items: [...prev, ...items]);
       return;
     }
-    // TODO: POST /qr/{code}/bind (sunucu tarafı da append yapmalı)
+    // TODO: POST /qr/{code}/bind
   }
 
-  /// Beyanname arama
+  /// Beyanname arama: yalnızca beyanname numarası ile.
   Future<List<BeyannameLite>> searchBeyanname(String query) async {
-    if (useMock) {
-      await Future.delayed(const Duration(milliseconds: 250));
-      return List.generate(6, (i) {
-            return BeyannameLite(
-              id: 'B-${1000 + i}',
-              no: '2025/0${i + 1}',
-              firma: i % 2 == 0 ? 'ACME' : 'Globex',
-            );
-          })
-          .where((b) => b.no.contains(query) || (b.firma ?? '').contains(query))
-          .toList();
-    }
-    // TODO: GET /beyanname?search=...
-    return [];
-  }
+    final q = query.trim();
+    if (q.isEmpty) return const [];
 
-  /// Kalem arama (beyannameye bağlı)
-  Future<List<KalemLite>> searchKalem(String beyannameId, String query) async {
     if (useMock) {
-      await Future.delayed(const Duration(milliseconds: 200));
-      return List.generate(
+      await Future.delayed(const Duration(milliseconds: 150));
+      return List<BeyannameLite>.generate(
         8,
-        (i) => KalemLite(id: 'K-$i', ad: 'Kalem $i'),
-      ).where((k) => k.ad.toLowerCase().contains(query.toLowerCase())).toList();
+        (i) => BeyannameLite(
+          id: 'B-${1000 + i}',
+          no: '2025/${(i + 1).toString().padLeft(2, '0')}',
+          firma: i.isEven ? 'ACME' : 'Globex',
+        ),
+      ).where((b) => _norm(b.no).contains(_norm(q))).toList();
     }
-    // TODO: GET /beyanname/{id}/kalem?search=...
-    return [];
+
+    final api = ApiService();
+    final list = await api.fetchGirisKalan();
+
+    final nq = _norm(q);
+    final out = <BeyannameLite>[];
+
+    for (final dto in list) {
+      // 1) Map üzerinden alan seçimi (toJson varsa)
+      Map<String, dynamic>? m;
+      final any = dto as dynamic;
+      m =
+          _safe(() => any.toJson() as Map<String, dynamic>?) ??
+          (dto is Map<String, dynamic> ? dto as Map<String, dynamic> : null);
+
+      String id = '';
+      String no = '';
+      String firma = '';
+
+      if (m != null) {
+        id = _pickFromMap(m, [
+          'id',
+          'girisId',
+          'beyannameId',
+          'declarationId',
+        ], def: '');
+        no = _pickFromMap(m, [
+          'beyannameNo',
+          'beyanname_no',
+          'belgeNo',
+          'declarationNo',
+          'declarationNumber',
+          'no',
+          'numara',
+        ], def: '');
+        firma = _pickFromMap(m, [
+          'firmaAdi',
+          'firma',
+          'companyName',
+          'musteriAdi',
+          'cariAdi',
+        ], def: '');
+      } else {
+        // 2) Güvenli property erişimi
+        id =
+            _safe(() => any.id?.toString()) ??
+            _safe(() => any.girisId?.toString()) ??
+            _safe(() => any.beyannameId?.toString()) ??
+            _safe(() => any.declarationId?.toString()) ??
+            '';
+        no =
+            _safe(() => any.beyannameNo?.toString()) ??
+            _safe(() => any.beyanname_no?.toString()) ??
+            _safe(() => any.belgeNo?.toString()) ??
+            _safe(() => any.declarationNo?.toString()) ??
+            _safe(() => any.declarationNumber?.toString()) ??
+            _safe(() => any.no?.toString()) ??
+            _safe(() => any.numara?.toString()) ??
+            '';
+        firma =
+            _safe(() => any.firmaAdi?.toString()) ??
+            _safe(() => any.firma?.toString()) ??
+            _safe(() => any.companyName?.toString()) ??
+            _safe(() => any.musteriAdi?.toString()) ??
+            _safe(() => any.cariAdi?.toString()) ??
+            '';
+      }
+
+      if (id.isEmpty && no.isEmpty && firma.isEmpty) {
+        // Son çare: tüm dto metninde ara
+        final s = dto.toString();
+        if (_norm(s).contains(nq)) {
+          out.add(BeyannameLite(id: 'NA', no: q, firma: null));
+        }
+        continue;
+      }
+
+      final match = _norm(no).contains(nq) || nq.contains(_norm(no));
+      if (match) {
+        out.add(
+          BeyannameLite(
+            id: id.isEmpty ? (no.isEmpty ? 'NA' : no) : id,
+            no: no.isEmpty ? (id.isEmpty ? 'NA' : id) : no,
+            firma: firma.isEmpty ? null : firma,
+          ),
+        );
+      }
+    }
+
+    if (out.isEmpty) {
+      // İlk 30 kaydı önizleme olarak döndür
+      for (final dto in list.take(30)) {
+        final any = dto as dynamic;
+        Map<String, dynamic>? m =
+            _safe(() => any.toJson() as Map<String, dynamic>?) ??
+            (dto is Map<String, dynamic> ? dto as Map<String, dynamic> : null);
+
+        String id = '';
+        String no = '';
+        String firma = '';
+
+        if (m != null) {
+          id = _pickFromMap(m, [
+            'id',
+            'girisId',
+            'beyannameId',
+            'declarationId',
+          ], def: 'NA');
+          no = _pickFromMap(m, [
+            'beyannameNo',
+            'beyanname_no',
+            'belgeNo',
+            'declarationNo',
+            'declarationNumber',
+            'no',
+            'numara',
+          ], def: id);
+          firma = _pickFromMap(m, [
+            'firmaAdi',
+            'firma',
+            'companyName',
+            'musteriAdi',
+            'cariAdi',
+          ], def: '');
+        } else {
+          id =
+              _safe(() => any.id?.toString()) ??
+              _safe(() => any.girisId?.toString()) ??
+              _safe(() => any.beyannameId?.toString()) ??
+              _safe(() => any.declarationId?.toString()) ??
+              'NA';
+          no =
+              _safe(() => any.beyannameNo?.toString()) ??
+              _safe(() => any.beyanname_no?.toString()) ??
+              _safe(() => any.belgeNo?.toString()) ??
+              _safe(() => any.declarationNo?.toString()) ??
+              _safe(() => any.declarationNumber?.toString()) ??
+              _safe(() => any.no?.toString()) ??
+              _safe(() => any.numara?.toString()) ??
+              id;
+          firma =
+              _safe(() => any.firmaAdi?.toString()) ??
+              _safe(() => any.firma?.toString()) ??
+              _safe(() => any.companyName?.toString()) ??
+              _safe(() => any.musteriAdi?.toString()) ??
+              _safe(() => any.cariAdi?.toString()) ??
+              '';
+        }
+
+        out.add(
+          BeyannameLite(id: id, no: no, firma: firma.isEmpty ? null : firma),
+        );
+      }
+    }
+
+    return out;
   }
 
-  /// Rol belirleme. Gerçek senaryoda JWT claim veya kullanıcı ayarı.
+  Future<List<KalemLite>> searchKalem(String beyannameId, String query) async {
+    await Future.delayed(const Duration(milliseconds: 120));
+    final q = query.trim().toLowerCase();
+    final base = List<KalemLite>.generate(
+      10,
+      (i) => KalemLite(id: 'K-$i', ad: 'Kalem $i'),
+    );
+    if (q.isEmpty) return base;
+    return base.where((k) => k.ad.toLowerCase().contains(q)).toList();
+  }
+
   Future<QrRole> resolveRole() async {
     if (useMock) return QrRole.viewer;
-    // TODO: gerçek rol çözümlemesi
     return QrRole.viewer;
   }
 
   Future<List<QrInfo>> listAll() async {
-    if (useMock) {
-      return _mem.values.toList()..sort((a, b) => a.code.compareTo(b.code));
-    }
-    // TODO: GET /qr
-    return [];
+    final list = _mem.values.toList();
+    list.sort((a, b) => a.code.compareTo(b.code));
+    return list;
   }
 }

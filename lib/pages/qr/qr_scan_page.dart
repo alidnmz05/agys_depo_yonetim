@@ -15,7 +15,7 @@ class QrScanPage extends StatefulWidget {
 
 class _QrScanPageState extends State<QrScanPage> {
   final MobileScannerController _controller = MobileScannerController();
-  final QrService _service = QrService(useMock: true);
+  final QrService _service = QrService(useMock: false);
   bool _handling = false;
   String? _last;
 

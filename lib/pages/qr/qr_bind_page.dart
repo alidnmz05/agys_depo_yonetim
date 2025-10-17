@@ -1,6 +1,4 @@
 // lib/pages/qr_bind_page.dart
-import 'dart:async';
-
 import 'package:agys_depo_yonetim/models/qr_models.dart';
 import 'package:agys_depo_yonetim/services/qr_service.dart';
 import 'package:flutter/material.dart';
@@ -15,10 +13,11 @@ class QrBindPage extends StatefulWidget {
 }
 
 class _QrBindPageState extends State<QrBindPage> {
+  
   BeyannameLite? _selectedB;
   KalemLite? _selectedK;
-  final TextEditingController _searchB = TextEditingController();
-  final TextEditingController _searchK = TextEditingController();
+  final TextEditingController _bQuery = TextEditingController();
+  final TextEditingController _kQuery = TextEditingController();
   final TextEditingController _miktar = TextEditingController();
   final TextEditingController _aciklama = TextEditingController();
   final List<QrBindItem> _items = [];
@@ -26,19 +25,110 @@ class _QrBindPageState extends State<QrBindPage> {
 
   double get _total => _items.fold(0.0, (s, e) => s + e.miktar);
 
+  Future<void> _searchBeyanname() async {
+    final q = _bQuery.text.trim();
+    if (q.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Beyanname no girin')));
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      final res = await widget.service.searchBeyanname(q);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // close loading
+
+      if (res.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Sonuç bulunamadı')));
+        return;
+      }
+
+      // Öneri chipsleri kaldırıldı. Sadece listeden seçim.
+      final sel = await showModalBottomSheet<BeyannameLite>(
+        context: context,
+        isScrollControlled: true,
+        builder:
+            (_) => _ResultSheet<BeyannameLite>(
+              title: 'Beyanname Seç',
+              items: res,
+              itemBuilder:
+                  (b) => '${b.no}${b.firma != null ? " • ${b.firma}" : ""}',
+            ),
+      );
+      if (sel != null) setState(() => _selectedB = sel);
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Arama sırasında hata')));
+    }
+  }
+
+  Future<void> _searchKalem() async {
+    final b = _selectedB;
+    if (b == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Önce beyanname seçin')));
+      return;
+    }
+    final q = _kQuery.text.trim();
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      final res = await widget.service.searchKalem(b.id, q);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      if (res.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Kalem bulunamadı')));
+        return;
+      }
+      final sel = await showModalBottomSheet<KalemLite>(
+        context: context,
+        isScrollControlled: true,
+        builder:
+            (_) => _ResultSheet<KalemLite>(
+              title: 'Kalem Seç',
+              items: res,
+              itemBuilder: (k) => k.ad,
+            ),
+      );
+      if (sel != null) setState(() => _selectedK = sel);
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Arama sırasında hata')));
+    }
+  }
+
   Future<void> _addItem() async {
     final b = _selectedB;
     if (b == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Beyanname seç.')));
+      ).showSnackBar(const SnackBar(content: Text('Beyanname seçin')));
       return;
     }
     final miktar = double.tryParse(_miktar.text.replaceAll(',', '.'));
     if (miktar == null || miktar <= 0) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Geçerli miktar gir.')));
+      ).showSnackBar(const SnackBar(content: Text('Geçerli miktar girin')));
       return;
     }
     setState(() {
@@ -53,6 +143,7 @@ class _QrBindPageState extends State<QrBindPage> {
       _miktar.clear();
       _aciklama.clear();
       _selectedK = null;
+      _kQuery.clear();
     });
   }
 
@@ -60,14 +151,14 @@ class _QrBindPageState extends State<QrBindPage> {
     if (_items.isEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('En az bir satır ekle.')));
+      ).showSnackBar(const SnackBar(content: Text('En az bir satır ekleyin')));
       return;
     }
     setState(() => _busy = true);
     try {
       await widget.service.bind(widget.code, _items);
       if (!mounted) return;
-      Navigator.of(context).pop(); // geri dön
+      Navigator.of(context).pop();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -86,34 +177,62 @@ class _QrBindPageState extends State<QrBindPage> {
               'Kod: ${widget.code}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
-                  child: _BeyannameSearch(
-                    controller: _searchB,
-                    hint: 'Beyanname no/firma',
-                    onSelected: (b) => setState(() => _selectedB = b),
-                    service: widget.service,
+                  child: TextField(
+                    controller: _bQuery,
+                    decoration: const InputDecoration(
+                      labelText: 'Beyanname no',
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (_) => _searchBeyanname(),
                   ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _searchBeyanname,
+                  icon: const Icon(Icons.search),
+                  label: const Text('Ara'),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            if (_selectedB != null)
-              Row(
-                children: [
-                  Expanded(
-                    child: _KalemSearch(
-                      controller: _searchK,
-                      hint: 'Kalem ara (opsiyonel)',
-                      onSelected: (k) => setState(() => _selectedK = k),
-                      service: widget.service,
-                      beyannameId: _selectedB!.id,
+            Row(
+              children: [
+                Expanded(
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Seçilen beyanname',
+                      border: OutlineInputBorder(),
+                    ),
+                    child: Text(
+                      _selectedB != null
+                          ? '${_selectedB!.no}${_selectedB!.firma != null ? " • ${_selectedB!.firma}" : ""}'
+                          : '—',
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _kQuery,
+                    decoration: const InputDecoration(
+                      labelText: 'Kalem ara (opsiyonel)',
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (_) => _searchKalem(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(onPressed: _searchKalem, child: const Text('Ara')),
+              ],
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -198,191 +317,47 @@ class _QrBindPageState extends State<QrBindPage> {
   }
 }
 
-class _BeyannameSearch extends StatefulWidget {
-  final TextEditingController controller;
-  final String hint;
-  final void Function(BeyannameLite) onSelected;
-  final QrService service;
-  const _BeyannameSearch({
-    required this.controller,
-    required this.hint,
-    required this.onSelected,
-    required this.service,
+class _ResultSheet<T> extends StatelessWidget {
+  final String title;
+  final List<T> items;
+  final String Function(T) itemBuilder;
+  const _ResultSheet({
+    required this.title,
+    required this.items,
+    required this.itemBuilder,
   });
 
   @override
-  State<_BeyannameSearch> createState() => _BeyannameSearchState();
-}
-
-class _BeyannameSearchState extends State<_BeyannameSearch> {
-  List<BeyannameLite> _results = [];
-  bool _loading = false;
-  Timer? _deb;
-
-  void _onChanged() {
-    _deb?.cancel();
-    _deb = Timer(const Duration(milliseconds: 300), () async {
-      setState(() => _loading = true);
-      final res = await widget.service.searchBeyanname(widget.controller.text);
-      if (!mounted) return;
-      setState(() {
-        _results = res;
-        _loading = false;
-      });
-    });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_onChanged);
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onChanged);
-    _deb?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: widget.controller,
-          decoration: InputDecoration(
-            labelText: widget.hint,
-            border: const OutlineInputBorder(),
-            suffixIcon:
-                _loading
-                    ? const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                    : const Icon(Icons.search),
-          ),
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, i) {
+                    final it = items[i];
+                    return ListTile(
+                      title: Text(itemBuilder(it)),
+                      onTap: () => Navigator.of(context).pop<T>(it),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 120,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _results.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) {
-              final b = _results[i];
-              final selected = b.id == (null == null ? null : null);
-              return ChoiceChip(
-                label: Text('${b.no}${b.firma != null ? " • ${b.firma}" : ""}'),
-                selected: selected,
-                onSelected: (_) => widget.onSelected(b),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _KalemSearch extends StatefulWidget {
-  final TextEditingController controller;
-  final String hint;
-  final void Function(KalemLite) onSelected;
-  final QrService service;
-  final String beyannameId;
-  const _KalemSearch({
-    required this.controller,
-    required this.hint,
-    required this.onSelected,
-    required this.service,
-    required this.beyannameId,
-  });
-
-  @override
-  State<_KalemSearch> createState() => _KalemSearchState();
-}
-
-class _KalemSearchState extends State<_KalemSearch> {
-  List<KalemLite> _results = [];
-  bool _loading = false;
-  Timer? _deb;
-
-  void _onChanged() {
-    _deb?.cancel();
-    _deb = Timer(const Duration(milliseconds: 300), () async {
-      setState(() => _loading = true);
-      final res = await widget.service.searchKalem(
-        widget.beyannameId,
-        widget.controller.text,
-      );
-      if (!mounted) return;
-      setState(() {
-        _results = res;
-        _loading = false;
-      });
-    });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_onChanged);
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onChanged);
-    _deb?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          controller: widget.controller,
-          decoration: InputDecoration(
-            labelText: widget.hint,
-            border: const OutlineInputBorder(),
-            suffixIcon:
-                _loading
-                    ? const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                    : const Icon(Icons.search),
-          ),
-        ),
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 96,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _results.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) {
-              final k = _results[i];
-              return ActionChip(
-                label: Text(k.ad),
-                onPressed: () => widget.onSelected(k),
-              );
-            },
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

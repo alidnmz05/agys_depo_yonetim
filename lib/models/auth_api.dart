@@ -1,78 +1,135 @@
-// lib/services/auth_api.dart
-import 'dart:convert';
+// lib/models/auth_api.dart  (revizyon: OpenAPI uyumlu)
+import 'package:dio/dio.dart';
 import 'package:agys_depo_yonetim/services/settings_controller.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 class AuthResult {
   final bool success;
   final String? token;
-  final int? kullaniciId;
-  final int? rolId;
-  final int? firmaId;
-  final int? antrepoId;
-  final String? antrepoKodu;
   final String? message;
+  final int? antrepoId;
 
-  AuthResult({
+  const AuthResult({
     required this.success,
     this.token,
-    this.kullaniciId,
-    this.rolId,
-    this.firmaId,
-    this.antrepoId,
-    this.antrepoKodu,
     this.message,
+    this.antrepoId,
   });
 
-  factory AuthResult.fromJson(Map<String, dynamic> j) => AuthResult(
-    success: j['success'] == true,
-    token: j['token']?.toString(),
-    kullaniciId: j['kullanici']?['id'] as int?,
-    rolId: j['kullanici']?['rolId'] as int?,
-    firmaId: j['kullanici']?['firmaId'] as int?,
-    antrepoId: j['kullanici']?['antrepoId'] as int?,
-    antrepoKodu: j['kullanici']?['antrepoKodu']?.toString(),
-    message: j['message']?.toString(),
-  );
+  static AuthResult fromResponse(Response res) {
+    String? token;
+    int? antrepoId;
+    String? msg;
+
+    // 1) Header'da Authorization/Bearer olabilir
+    final authH = res.headers['authorization'] ?? res.headers['Authorization'];
+    if (authH != null && authH.isNotEmpty) {
+      final h = authH.first;
+      token = h.startsWith('Bearer ') ? h.substring(7) : h;
+    }
+
+    // 2) Body map ise tipik alan isimlerini deneriz
+    if (res.data is Map) {
+      final m = res.data as Map;
+      token =
+          (m['token'] ?? m['access_token'] ?? m['jwt'] ?? token)?.toString();
+      msg = (m['message'] ?? m['Message'])?.toString();
+      final aid = m['antrepoId'] ?? m['AntrepoId'];
+      if (aid != null) {
+        try {
+          antrepoId = int.parse(aid.toString());
+        } catch (_) {}
+      }
+    } else if (res.data is String && (token ?? '').isEmpty) {
+      // Body string ise token direkt dönebilir
+      final s = (res.data as String).trim();
+      if (s.length > 20) token = s;
+    }
+
+    return AuthResult(
+      success:
+          (res.statusCode ?? 0) >= 200 &&
+          (res.statusCode ?? 0) < 300 &&
+          token != null &&
+          token.isNotEmpty,
+      token: token,
+      message: msg,
+      antrepoId: antrepoId,
+    );
+  }
 }
 
 class AuthApi {
-  final SettingsController _sc = SettingsController.instance;
+  AuthApi._();
+  static final instance = AuthApi._();
+  final _sc = SettingsController.instance;
 
+  Dio _dio() => Dio(
+    BaseOptions(
+      baseUrl: _sc.baseUrl,
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {'Content-Type': 'application/json'},
+    ),
+  );
+
+  /// POST /api/Auth/login
+  /// Body: { eposta, sifre, antrepoKodu }
   Future<AuthResult> login({
     required String eposta,
     required String sifre,
     required String antrepoKodu,
+    CancelToken? cancelToken,
   }) async {
-    await _sc.init();
-    final uri = Uri.parse('${_sc.baseUrl}/api/Auth/login');
-    final r = await http.post(
-      uri,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: jsonEncode({
-        'eposta': eposta,
-        'sifre': sifre,
-        'antrepoKodu': antrepoKodu,
-      }),
-    );
+    final dio = _dio();
+    final paths = [
+      '/api/Auth/Login',
+      '/api/Auth/login',
+      '/Auth/Login',
+      '/Auth/login',
+    ];
 
-    final data = jsonDecode(utf8.decode(r.bodyBytes));
-    if (r.statusCode == 200 && data is Map<String, dynamic>) {
-      final res = AuthResult.fromJson(data);
-      if (res.success && res.token != null) {
-        _sc.token = res.token!;
-        if (res.antrepoId != null) {
-          _sc.antrepoId = res.antrepoId!;
+    for (final p in paths) {
+      try {
+        if (kDebugMode) {
+          // isteğin nereye gittiğini görmek için
+          // ignore: avoid_print
+          print('[AUTH] POST ${_sc.baseUrl}$p');
         }
+        final res = await dio.post<Map<String, dynamic>>(
+          p,
+          data: {
+            'eposta': eposta.trim(),
+            'sifre': sifre,
+            'antrepoKodu': antrepoKodu.trim(),
+          },
+          cancelToken: cancelToken,
+        );
+
+        final ar = AuthResult.fromResponse(res);
+        if (ar.success && (ar.token ?? '').isNotEmpty) {
+          _sc.token = ar.token!;
+          if (ar.antrepoId != null) _sc.antrepoId = ar.antrepoId!;
+        }
+        return ar;
+      } on DioException catch (e) {
+        final code = e.response?.statusCode;
+        if (code == 404) continue; // diğer path'i dene
+        final msg =
+            e.response?.data is Map
+                ? ((e.response?.data as Map)['message']?.toString() ?? '')
+                : e.message;
+        return AuthResult(
+          success: false,
+          message:
+              msg?.isNotEmpty == true ? msg : 'Login failed (${code ?? 0})',
+        );
       }
-      return res;
     }
-    if (data is Map<String, dynamic>) {
-      return AuthResult.fromJson(data);
-    }
-    return AuthResult(success: false, message: 'Login failed ${r.statusCode}');
+
+    return const AuthResult(
+      success: false,
+      message: 'Login endpoint not found (404)',
+    );
   }
 }

@@ -1,5 +1,4 @@
 // lib/pages/beyanname_liste_page.dart
-import 'package:agys_depo_yonetim/pages/qr_kod.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';

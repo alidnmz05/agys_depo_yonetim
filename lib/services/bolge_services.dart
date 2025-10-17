@@ -1,215 +1,201 @@
-// lib/services/bolge_api.dart
+// lib/services/bolge_services.dart  (named param adapter fix)
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-
 import 'settings_controller.dart';
 import '../models/bolge.dart';
-import 'bolge_mock.dart';
-
-/// Mock açık: API kapalıyken yerel bellekten çalışır.
-const bool _useMock = true;
 
 class BolgeApi {
   BolgeApi._();
   static final instance = BolgeApi._();
-
   final SettingsController _sc = SettingsController.instance;
 
-  // Mock store ve düz cache
-  BolgeMockStore? _mock;
-  List<Bolge> _flat = const [];
+  List<Bolge> _flat = [];
+  List<Bolge> get flat => List.unmodifiable(_flat);
 
   Map<String, String> _authHeaders() => {
-    'Authorization': 'Bearer ${_sc.token}',
-    'Accept': 'application/json',
     'Content-Type': 'application/json',
+    if (_sc.token.isNotEmpty) 'Authorization': 'Bearer ${_sc.token}',
   };
 
-  Future<void> refreshFlat({int? antrepoId}) async {
-    await _sc.init();
-    final id = antrepoId ?? _sc.antrepoId;
-    if (_useMock) {
-      _mock ??= BolgeMockStore(id);
-      _flat = _mock!.flat;
-      return;
-    }
-    final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri/antrepo/$id');
+  // ---------- Core calls ----------
+
+  Future<void> fetchAll() async {
+    final uri = Uri.parse(
+      '${_sc.baseUrl}/api/YerlesimYeri/antrepo/${_sc.antrepoId}',
+    );
     final r = await http.get(uri, headers: _authHeaders());
     if (r.statusCode >= 200 && r.statusCode < 300) {
-      final data = jsonDecode(utf8.decode(r.bodyBytes));
-      final list =
-          (data['data'] as List).map((e) => Bolge.fromJson(e)).toList();
-      _flat = list;
+      final body = json.decode(r.body) as List;
+      _flat =
+          body.map((e) => Bolge.fromJson(e as Map<String, dynamic>)).toList();
+      _recomputeChildCounts();
       return;
     }
-    throw Exception('antrepo list failed ${r.statusCode}: ${r.body}');
+    throw Exception('fetchAll failed ${r.statusCode}: ${r.body}');
   }
 
-  List<Bolge> childrenLocal(int? parentId, {int? antrepoId}) {
-    if (_useMock) {
-      _mock ??= BolgeMockStore(antrepoId ?? _sc.antrepoId);
-      return _mock!.childrenLocal(parentId);
+  Future<Bolge> getById(int id) async {
+    final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri/$id');
+    final r = await http.get(uri, headers: _authHeaders());
+    if (r.statusCode >= 200 && r.statusCode < 300) {
+      final j = json.decode(r.body) as Map<String, dynamic>;
+      return Bolge.fromJson(j);
     }
-    final pid = parentId ?? 0;
-    final aId = antrepoId ?? _sc.antrepoId;
-    final byParent =
-        _flat
-            .where((e) => (e.parentId ?? 0) == pid && e.antrepoId == aId)
-            .toList()
-          ..sort((a, b) => a.sira.compareTo(b.sira));
-    return byParent.map((e) {
-      final cc = _flat.where((x) => (x.parentId ?? 0) == e.id).length;
-      return e.copyWith(childCount: cc);
-    }).toList();
+    throw Exception('getById failed ${r.statusCode}: ${r.body}');
   }
 
-  List<Bolge> pathLocal(int id) {
-    if (_useMock) {
-      _mock ??= BolgeMockStore(_sc.antrepoId);
-      return _mock!.pathLocal(id);
-    }
-    final out = <Bolge>[];
-    final byId = {for (final e in _flat) e.id: e};
-    var cur = byId[id];
-    while (cur != null) {
-      out.insert(0, cur);
-      final pid = cur.parentId ?? 0;
-      cur = pid == 0 ? null : byId[pid];
-    }
-    return out;
-  }
-
-  Future<Bolge> create({
-    required int antrepoId,
-    required int? parentId,
-    required String kod,
-    int? sira,
-    String? tip,
-    String? aciklama,
-    bool aktif = true,
-  }) async {
-    await _sc.init();
-    if (_useMock) {
-      _mock ??= BolgeMockStore(antrepoId);
-      final b = _mock!.create(
-        parentId: parentId,
-        kod: kod,
-        sira: sira,
-        tip: tip,
-        aciklama: aciklama,
-        aktif: aktif,
-      );
-      _flat = _mock!.flat;
-      return b;
-    }
+  Future<Bolge> _addNode(Map<String, dynamic> payload) async {
     final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri');
-    final body = {
-      'ustYerlesimId': parentId,
-      'antrepoId': antrepoId,
-      'kod': kod,
-      'sira': sira ?? 0,
-      'tip': tip,
-      'aciklama': aciklama,
-      'aktif': aktif,
-    };
     final r = await http.post(
       uri,
       headers: _authHeaders(),
-      body: jsonEncode(body),
+      body: json.encode(payload),
     );
     if (r.statusCode >= 200 && r.statusCode < 300) {
-      final data = jsonDecode(utf8.decode(r.bodyBytes));
-      final b = Bolge.fromJson(data['data']);
-      _flat = [..._flat, b];
-      return b;
+      final j = json.decode(r.body) as Map<String, dynamic>;
+      final n = Bolge.fromJson(j);
+      _flat.add(n);
+      _recomputeChildCounts();
+      return n;
     }
-    throw Exception('create failed ${r.statusCode}: ${r.body}');
+    throw Exception('addNode failed ${r.statusCode}: ${r.body}');
   }
 
-  Future<List<Bolge>> createMany({
+  Future<Bolge> _updateNode(Map<String, dynamic> payload) async {
+    final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri');
+    final r = await http.put(
+      uri,
+      headers: _authHeaders(),
+      body: json.encode(payload),
+    );
+    if (r.statusCode >= 200 && r.statusCode < 300) {
+      final j = json.decode(r.body) as Map<String, dynamic>;
+      final n = Bolge.fromJson(j);
+      final idx = _flat.indexWhere((e) => e.id == n.id);
+      if (idx >= 0) _flat[idx] = n;
+      _recomputeChildCounts();
+      return n;
+    }
+    throw Exception('updateNode failed ${r.statusCode}: ${r.body}');
+  }
+
+  Future<void> deleteNode(int id) async {
+    final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri/$id');
+    final r = await http.delete(uri, headers: _authHeaders());
+    if (r.statusCode >= 200 && r.statusCode < 300) {
+      _flat = _flat.where((e) => e.id != id).toList();
+      _recomputeChildCounts();
+      return;
+    }
+    throw Exception('deleteNode failed ${r.statusCode}: ${r.body}');
+  }
+
+  // ---------- Adapters expected by bolgeler.dart ----------
+
+  Future<void> refreshFlat({required int antrepoId}) async {
+    _sc.antrepoId = antrepoId;
+    await fetchAll();
+  }
+
+  List<Bolge> childrenLocal({int? parentId}) {
+    return _flat.where((e) => e.parentId == parentId).toList()
+      ..sort((a, b) => a.sira.compareTo(b.sira));
+  }
+
+  List<Bolge> pathLocal({required int id}) {
+    final map = {for (final b in _flat) b.id: b};
+    final path = <Bolge>[];
+    Bolge? cur = map[id];
+    while (cur != null) {
+      path.insert(0, cur);
+      cur = cur.parentId == null ? null : map[cur.parentId!];
+    }
+    return path;
+  }
+
+  /// create({antrepoId, parentId, kod, sira=0, tip, aciklama, aktif=true})
+  Future<Bolge> create({
     required int antrepoId,
-    required int? parentId,
+    int? parentId,
+    required String kod,
+    int sira = 0,
+    String? tip,
+    String? aciklama,
+    bool? aktif,
+  }) async {
+    final payload = {
+      'antrepoId': antrepoId,
+      'ustYerlesimId': parentId,
+      'kod': kod,
+      'sira': sira,
+      'tip': tip,
+      'aciklama': aciklama,
+      'aktif': aktif ?? true,
+    };
+    return _addNode(payload);
+  }
+
+  /// createMany({baseName, count, start=1, separator='-', parentId, antrepoId})
+  Future<List<Bolge>> createMany({
     required String baseName,
     required int count,
     int start = 1,
     String separator = '-',
-    int? siraStart,
-    int siraStep = 10,
+    int? parentId,
+    required int antrepoId,
   }) async {
-    if (_useMock) {
-      _mock ??= BolgeMockStore(antrepoId);
-      final list = _mock!.createMany(
-        parentId: parentId,
-        baseName: baseName,
-        count: count,
-        start: start,
-        separator: separator,
-      );
-      _flat = _mock!.flat;
-      return list;
-    }
     final out = <Bolge>[];
-    for (var i = 0; i < count; i++) {
-      final kod = '$baseName$separator${start + i}';
-      final sira = siraStart == null ? null : siraStart + i * siraStep;
+    for (int i = 0; i < count; i++) {
+      final name = '$baseName$separator${start + i}';
       out.add(
         await create(
           antrepoId: antrepoId,
           parentId: parentId,
-          kod: kod,
-          sira: sira,
+          kod: name,
+          sira: start + i,
         ),
       );
     }
     return out;
   }
 
-  Future<Bolge> update(Bolge b) async {
-    await _sc.init();
-    if (_useMock) {
-      _mock ??= BolgeMockStore(_sc.antrepoId);
-      final nb = _mock!.update(b);
-      _flat = _mock!.flat;
-      return nb;
-    }
-    final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri');
-    final r = await http.put(
-      uri,
-      headers: _authHeaders(),
-      body: jsonEncode({
-        'id': b.id,
-        'ustYerlesimId': b.parentId,
-        'antrepoId': b.antrepoId,
-        'kod': b.ad,
-        'sira': b.sira,
-        'tip': b.tip,
-        'aciklama': b.aciklama,
-        'aktif': b.aktif,
-      }),
+  /// update({id, kod, parentId, sira, tip, aciklama, aktif, antrepoId})
+  Future<Bolge> update({
+    required int id,
+    String? kod,
+    int? parentId,
+    int? sira,
+    String? tip,
+    String? aciklama,
+    bool? aktif,
+    int? antrepoId,
+  }) async {
+    final current = _flat.firstWhere(
+      (e) => e.id == id,
+      orElse: () => throw Exception('id not found'),
     );
-    if (r.statusCode >= 200 && r.statusCode < 300) {
-      final data = jsonDecode(utf8.decode(r.bodyBytes));
-      final nb = Bolge.fromJson(data['data']);
-      _flat = _flat.map((x) => x.id == nb.id ? nb : x).toList();
-      return nb;
-    }
-    throw Exception('update failed ${r.statusCode}: ${r.body}');
+    final body = {
+      'id': id,
+      'antrepoId': antrepoId ?? current.antrepoId,
+      'ustYerlesimId': parentId ?? current.parentId,
+      'kod': kod ?? current.ad,
+      'sira': sira ?? current.sira,
+      'tip': tip ?? current.tip,
+      'aciklama': aciklama ?? current.aciklama,
+      'aktif': aktif ?? (current.aktif ?? true),
+    };
+    return _updateNode(body);
   }
 
-  Future<void> deleteNode(int id) async {
-    await _sc.init();
-    if (_useMock) {
-      _mock ??= BolgeMockStore(_sc.antrepoId);
-      _mock!.deleteNode(id);
-      _flat = _mock!.flat;
-      return;
+  // ---------- Helpers ----------
+  void _recomputeChildCounts() {
+    final count = <int, int>{};
+    for (final b in _flat) {
+      final pid = b.parentId;
+      if (pid != null) {
+        count[pid] = (count[pid] ?? 0) + 1;
+      }
     }
-    final uri = Uri.parse('${_sc.baseUrl}/api/YerlesimYeri/$id');
-    final r = await http.delete(uri, headers: _authHeaders());
-    if (r.statusCode >= 200 && r.statusCode < 300) {
-      _flat = _flat.where((e) => e.id != id).toList();
-      return;
-    }
-    throw Exception('delete failed ${r.statusCode}: ${r.body}');
+    _flat = _flat.map((b) => b.copyWith(childCount: count[b.id] ?? 0)).toList();
   }
 }

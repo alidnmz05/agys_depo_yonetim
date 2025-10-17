@@ -1,5 +1,4 @@
 import 'package:agys_depo_yonetim/pages/ayarlar.dart';
-import 'package:agys_depo_yonetim/pages/beyanname_liste_page.dart';
 import 'package:agys_depo_yonetim/pages/bolgeler.dart';
 import 'package:agys_depo_yonetim/pages/login_page.dart';
 import 'package:agys_depo_yonetim/pages/qr/qr_list.dart';
@@ -35,7 +34,7 @@ class MyApp extends StatelessWidget {
             useMaterial3: true,
           ),
           debugShowCheckedModeBanner: false,
-          home: const BeyannameListePage(),
+          home: const LoginPage(),
         );
       },
     );

@@ -59,11 +59,11 @@ class _BolgePageState extends State<BolgePage> {
   void _reloadLocal() {
     final parentId = _currentParentId;
     if (parentId == null) {
-      _items = api.childrenLocal(null, antrepoId: sc.antrepoId);
+      _items = api.childrenLocal(parentId: null);
       _path = [];
     } else {
-      _items = api.childrenLocal(parentId, antrepoId: sc.antrepoId);
-      _path = api.pathLocal(parentId);
+      _items = api.childrenLocal(parentId: parentId);
+      _path = api.pathLocal(id: parentId);
     }
     _apply();
   }
@@ -126,7 +126,16 @@ class _BolgePageState extends State<BolgePage> {
       initial: b.ad,
     );
     if (ad == null || ad.isEmpty || ad == b.ad) return;
-    await api.update(b.copyWith(ad: ad));
+    await api.update(
+      id: b.id,
+      antrepoId: b.antrepoId,
+      parentId: b.parentId,
+      kod: ad,
+      sira: b.sira,
+      tip: b.tip,
+      aciklama: b.aciklama,
+      aktif: b.aktif,
+    );
     _reloadLocal();
   }
 

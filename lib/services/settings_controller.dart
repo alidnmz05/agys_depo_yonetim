@@ -45,13 +45,13 @@ class SettingsController extends ChangeNotifier {
   String get token => _sp.getString('token') ?? '';
   set token(String v) => _sp.setString('token', v);
   Future<void> clearToken() async => _sp.remove('token');
-
+ 
   // Antrepo ve Base URL
   int get antrepoId => _sp.getInt('antrepo_id') ?? 1;
   set antrepoId(int v) => _sp.setInt('antrepo_id', v);
 
   String get baseUrl =>
-      _sp.getString('base_url') ?? 'http://213.159.6.209:65062';
+      _sp.getString('base_url') ?? 'http://31.57.156.14:65060';
   set baseUrl(String v) => _sp.setString('base_url', v);
 
   Future<void> resetToFirstLaunch() async {

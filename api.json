@@ -1,0 +1,312 @@
+{
+    "openapi": "3.0.1",
+    "info": {
+        "title": "Antrepo.MobileApi",
+        "version": "1.0"
+    },
+    "paths": {
+        "/": {
+            "get": {
+                "tags": [
+                    "Antrepo.MobileApi"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/api/Auth/login": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/KullaniciGirisDTO"
+                            }
+                        },
+                        "text/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/KullaniciGirisDTO"
+                            }
+                        },
+                        "application/*+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/KullaniciGirisDTO"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/api/YerlesimYeri/antrepo/{antrepoId}": {
+            "get": {
+                "tags": [
+                    "YerlesimYeri"
+                ],
+                "parameters": [
+                    {
+                        "name": "antrepoId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/api/YerlesimYeri/{id}": {
+            "get": {
+                "tags": [
+                    "YerlesimYeri"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "YerlesimYeri"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/api/YerlesimYeri/hiyerarsi/{antrepoId}": {
+            "get": {
+                "tags": [
+                    "YerlesimYeri"
+                ],
+                "parameters": [
+                    {
+                        "name": "antrepoId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/api/YerlesimYeri": {
+            "post": {
+                "tags": [
+                    "YerlesimYeri"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/YerlesimYeriCreateDTO"
+                            }
+                        },
+                        "text/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/YerlesimYeriCreateDTO"
+                            }
+                        },
+                        "application/*+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/YerlesimYeriCreateDTO"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "YerlesimYeri"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/YerlesimYeriUpdateDTO"
+                            }
+                        },
+                        "text/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/YerlesimYeriUpdateDTO"
+                            }
+                        },
+                        "application/*+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/YerlesimYeriUpdateDTO"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "KullaniciGirisDTO": {
+                "type": "object",
+                "properties": {
+                    "eposta": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "sifre": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "antrepoKodu": {
+                        "type": "string",
+                        "nullable": true
+                    }
+                },
+                "additionalProperties": false
+            },
+            "YerlesimYeriCreateDTO": {
+                "required": [
+                    "antrepoId",
+                    "kod"
+                ],
+                "type": "object",
+                "properties": {
+                    "ustYerlesimId": {
+                        "type": "integer",
+                        "format": "int32",
+                        "nullable": true
+                    },
+                    "antrepoId": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "kod": {
+                        "maxLength": 100,
+                        "minLength": 0,
+                        "type": "string"
+                    },
+                    "sira": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "tip": {
+                        "maxLength": 50,
+                        "minLength": 0,
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "aciklama": {
+                        "maxLength": 500,
+                        "minLength": 0,
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "aktif": {
+                        "type": "boolean"
+                    }
+                },
+                "additionalProperties": false
+            },
+            "YerlesimYeriUpdateDTO": {
+                "required": [
+                    "id"
+                ],
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "ustYerlesimId": {
+                        "type": "integer",
+                        "format": "int32",
+                        "nullable": true
+                    },
+                    "kod": {
+                        "maxLength": 100,
+                        "minLength": 0,
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "sira": {
+                        "type": "integer",
+                        "format": "int32",
+                        "nullable": true
+                    },
+                    "tip": {
+                        "maxLength": 50,
+                        "minLength": 0,
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "aciklama": {
+                        "maxLength": 500,
+                        "minLength": 0,
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "aktif": {
+                        "type": "boolean",
+                        "nullable": true
+                    }
+                },
+                "additionalProperties": false
+            }
+        }
+    }
+}
